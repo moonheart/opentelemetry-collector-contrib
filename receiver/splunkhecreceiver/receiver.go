@@ -22,14 +22,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 	"go.opencensus.io/trace"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/translator/conventions"
 	"go.uber.org/zap"
@@ -73,18 +72,18 @@ var (
 
 // splunkReceiver implements the component.MetricsReceiver for Splunk HEC metric protocol.
 type splunkReceiver struct {
-	sync.Mutex
 	logger          *zap.Logger
 	config          *Config
 	logsConsumer    consumer.Logs
 	metricsConsumer consumer.Metrics
 	server          *http.Server
+	obsrecv         *obsreport.Receiver
 }
 
 var _ component.MetricsReceiver = (*splunkReceiver)(nil)
 
-// NewMetricsReceiver creates the Splunk HEC receiver with the given configuration.
-func NewMetricsReceiver(
+// newMetricsReceiver creates the Splunk HEC receiver with the given configuration.
+func newMetricsReceiver(
 	logger *zap.Logger,
 	config Config,
 	nextConsumer consumer.Metrics,
@@ -95,6 +94,11 @@ func NewMetricsReceiver(
 
 	if config.Endpoint == "" {
 		return nil, errEmptyEndpoint
+	}
+
+	transport := "http"
+	if config.TLSSetting != nil {
+		transport = "https"
 	}
 
 	r := &splunkReceiver{
@@ -108,13 +112,14 @@ func NewMetricsReceiver(
 			ReadHeaderTimeout: defaultServerTimeout,
 			WriteTimeout:      defaultServerTimeout,
 		},
+		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: config.ID(), Transport: transport}),
 	}
 
 	return r, nil
 }
 
-// NewLogsReceiver creates the Splunk HEC receiver with the given configuration.
-func NewLogsReceiver(
+// newLogsReceiver creates the Splunk HEC receiver with the given configuration.
+func newLogsReceiver(
 	logger *zap.Logger,
 	config Config,
 	nextConsumer consumer.Logs,
@@ -147,9 +152,6 @@ func NewLogsReceiver(
 // By convention the consumer of the received data is set when the receiver
 // instance is created.
 func (r *splunkReceiver) Start(_ context.Context, host component.Host) error {
-	r.Lock()
-	defer r.Unlock()
-
 	var ln net.Listener
 	// set up the listener
 	ln, err := r.config.HTTPServerSettings.ToListener()
@@ -179,24 +181,13 @@ func (r *splunkReceiver) Start(_ context.Context, host component.Host) error {
 // Shutdown tells the receiver that should stop reception,
 // giving it a chance to perform any necessary clean-up.
 func (r *splunkReceiver) Shutdown(context.Context) error {
-	r.Lock()
-	defer r.Unlock()
-
-	err := r.server.Close()
-
-	return err
+	return r.server.Close()
 }
 
 func (r *splunkReceiver) handleReq(resp http.ResponseWriter, req *http.Request) {
-
-	transport := "http"
-	if r.config.TLSSetting != nil {
-		transport = "https"
-	}
-
-	ctx := obsreport.ReceiverContext(req.Context(), r.config.ID(), transport)
+	ctx := req.Context()
 	if r.logsConsumer == nil {
-		ctx = obsreport.StartMetricsReceiveOp(ctx, r.config.ID(), transport)
+		ctx = r.obsrecv.StartMetricsOp(ctx)
 	}
 	reqPath := req.URL.Path
 	if !r.config.pathGlob.Match(reqPath) {
@@ -272,10 +263,10 @@ func (r *splunkReceiver) createResourceCustomizer(req *http.Request) func(pdata.
 }
 
 func (r *splunkReceiver) consumeMetrics(ctx context.Context, events []*splunk.Event, resp http.ResponseWriter, req *http.Request) {
-	md, _ := SplunkHecToMetricsData(r.logger, events, r.createResourceCustomizer(req))
+	md, _ := splunkHecToMetricsData(r.logger, events, r.createResourceCustomizer(req))
 
 	decodeErr := r.metricsConsumer.ConsumeMetrics(ctx, md)
-	obsreport.EndMetricsReceiveOp(ctx, typeStr, len(events), decodeErr)
+	r.obsrecv.EndMetricsOp(ctx, typeStr, len(events), decodeErr)
 
 	if decodeErr != nil {
 		r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, decodeErr)
@@ -286,7 +277,7 @@ func (r *splunkReceiver) consumeMetrics(ctx context.Context, events []*splunk.Ev
 }
 
 func (r *splunkReceiver) consumeLogs(ctx context.Context, events []*splunk.Event, resp http.ResponseWriter, req *http.Request) {
-	ld, err := SplunkHecToLogData(r.logger, events, r.createResourceCustomizer(req))
+	ld, err := splunkHecToLogData(r.logger, events, r.createResourceCustomizer(req))
 	if err != nil {
 		r.failRequest(ctx, resp, http.StatusBadRequest, errUnmarshalBodyRespBody, err)
 		return

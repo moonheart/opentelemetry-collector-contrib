@@ -27,7 +27,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 	"go.uber.org/zap"
@@ -43,7 +43,7 @@ const (
 
 var (
 	maxDuration   = time.Duration(math.MaxInt64)
-	maxDurationMs = float64(maxDuration.Milliseconds())
+	maxDurationMs = durationToMillis(maxDuration)
 
 	defaultLatencyHistogramBucketsMs = []float64{
 		2, 4, 6, 8, 10, 50, 100, 200, 400, 800, 1000, 1400, 2000, 5000, 10_000, 15_000, maxDurationMs,
@@ -89,9 +89,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 
 	bounds := defaultLatencyHistogramBucketsMs
 	if pConfig.LatencyHistogramBuckets != nil {
-		bounds = mapDurationsToMillis(pConfig.LatencyHistogramBuckets, func(duration time.Duration) float64 {
-			return float64(duration.Milliseconds())
-		})
+		bounds = mapDurationsToMillis(pConfig.LatencyHistogramBuckets)
 
 		// "Catch-all" bucket.
 		if bounds[len(bounds)-1] != maxDurationMs {
@@ -118,10 +116,16 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 	}, nil
 }
 
-func mapDurationsToMillis(vs []time.Duration, f func(duration time.Duration) float64) []float64 {
+// durationToMillis converts the given duration to the number of milliseconds it represents.
+// Note that this can return sub-millisecond (i.e. < 1ms) values as well.
+func durationToMillis(d time.Duration) float64 {
+	return float64(d.Nanoseconds()) / float64(time.Millisecond.Nanoseconds())
+}
+
+func mapDurationsToMillis(vs []time.Duration) []float64 {
 	vsm := make([]float64, len(vs))
 	for i, v := range vs {
-		vsm[i] = f(v)
+		vsm[i] = durationToMillis(v)
 	}
 	return vsm
 }
@@ -214,11 +218,7 @@ func (p *processorImp) ConsumeTraces(ctx context.Context, traces pdata.Traces) e
 	}
 
 	// Forward trace data unmodified.
-	if err := p.nextConsumer.ConsumeTraces(ctx, traces); err != nil {
-		return err
-	}
-
-	return nil
+	return p.nextConsumer.ConsumeTraces(ctx, traces)
 }
 
 // buildMetrics collects the computed raw metrics data, builds the metrics object and
@@ -345,7 +345,7 @@ func buildDimensionKVs(serviceName string, span pdata.Span, optionalDims []Dimen
 	spanAttr := span.Attributes()
 	for _, d := range optionalDims {
 		if attr, ok := spanAttr.Get(d.Name); ok {
-			dims[d.Name] = tracetranslator.AttributeValueToString(attr, false)
+			dims[d.Name] = tracetranslator.AttributeValueToString(attr)
 		} else if d.Default != nil {
 			// Set the default if configured, otherwise this metric should have no value set for the dimension.
 			dims[d.Name] = *d.Default
@@ -381,7 +381,7 @@ func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension) met
 			value = *d.Default
 		}
 		if attr, ok := spanAttr.Get(d.Name); ok {
-			value = tracetranslator.AttributeValueToString(attr, false)
+			value = tracetranslator.AttributeValueToString(attr)
 		}
 		concatDimensionValue(&metricKeyBuilder, value, true)
 	}

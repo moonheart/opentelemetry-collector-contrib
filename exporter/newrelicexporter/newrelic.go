@@ -26,7 +26,7 @@ import (
 	"github.com/newrelic/newrelic-telemetry-sdk-go/telemetry"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -229,7 +229,7 @@ func calcLogBatches(ld pdata.Logs) int {
 
 func (e exporter) pushMetricData(ctx context.Context, md pdata.Metrics) (outputErr error) {
 	details := newMetricMetadata(ctx)
-	_, details.dataInputCount = md.MetricAndDataPointCount()
+	details.dataInputCount = md.DataPointCount()
 	builder := func() ([]telemetry.Batch, error) { return e.buildMetricBatch(&details, md) }
 	return e.export(ctx, &details, builder)
 }
@@ -359,6 +359,9 @@ func (e exporter) doRequest(details *exportMetadata, req *http.Request) error {
 		} else if response.StatusCode == http.StatusForbidden {
 			// The data has been lost, but it is due to an invalid api key
 			e.logger.Debug("HTTP Forbidden response", zap.String("Status", response.Status))
+		} else if response.StatusCode == http.StatusTooManyRequests {
+			// The data has been lost, but it is due to rate limiting
+			e.logger.Debug("HTTP Too Many Requests", zap.String("Status", response.Status))
 		} else {
 			// The data has been lost due to an error in our payload
 			details.dataOutputCount = 0

@@ -28,7 +28,7 @@ import (
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 	"go.uber.org/zap"
 
@@ -40,7 +40,7 @@ func newTracesProcessor(cfg config.Processor, next consumer.Traces, options ...O
 	opts := append(options, withKubeClientProvider(newFakeClient))
 	return createTracesProcessorWithOptions(
 		context.Background(),
-		component.ProcessorCreateParams{Logger: zap.NewNop()},
+		componenttest.NewNopProcessorCreateSettings(),
 		cfg,
 		next,
 		opts...,
@@ -51,7 +51,7 @@ func newMetricsProcessor(cfg config.Processor, nextMetricsConsumer consumer.Metr
 	opts := append(options, withKubeClientProvider(newFakeClient))
 	return createMetricsProcessorWithOptions(
 		context.Background(),
-		component.ProcessorCreateParams{Logger: zap.NewNop()},
+		componenttest.NewNopProcessorCreateSettings(),
 		cfg,
 		nextMetricsConsumer,
 		opts...,
@@ -62,7 +62,7 @@ func newLogsProcessor(cfg config.Processor, nextLogsConsumer consumer.Logs, opti
 	opts := append(options, withKubeClientProvider(newFakeClient))
 	return createLogsProcessorWithOptions(
 		context.Background(),
-		component.ProcessorCreateParams{Logger: zap.NewNop()},
+		componenttest.NewNopProcessorCreateSettings(),
 		cfg,
 		nextLogsConsumer,
 		opts...,
@@ -217,7 +217,7 @@ func TestProcessorBadConfig(t *testing.T) {
 }
 
 func TestProcessorBadClientProvider(t *testing.T) {
-	clientProvider := func(_ *zap.Logger, _ k8sconfig.APIConfig, _ kube.ExtractionRules, _ kube.Filters, _ []kube.Association, _ kube.APIClientsetProvider, _ kube.InformerProvider) (kube.Client, error) {
+	clientProvider := func(_ *zap.Logger, _ k8sconfig.APIConfig, _ kube.ExtractionRules, _ kube.Filters, _ []kube.Association, _ kube.Excludes, _ kube.APIClientsetProvider, _ kube.InformerProvider, _ kube.InformerProviderNamespace) (kube.Client, error) {
 		return nil, fmt.Errorf("bad client error")
 	}
 
@@ -323,7 +323,7 @@ func TestProcessorNoAttrs(t *testing.T) {
 		t,
 		NewFactory().CreateDefaultConfig(),
 		nil,
-		WithExtractMetadata(metadataPodName),
+		WithExtractMetadata(conventions.AttributeK8sPod),
 	)
 
 	ctx := client.NewContext(context.Background(), &client.Client{IP: "1.1.1.1"})
@@ -701,7 +701,7 @@ func TestMetricsProcessorHostname(t *testing.T) {
 	p, err := newMetricsProcessor(
 		NewFactory().CreateDefaultConfig(),
 		next,
-		WithExtractMetadata(metadataPodName),
+		WithExtractMetadata(conventions.AttributeK8sPod),
 		withExtractKubernetesProcessorInto(&kp),
 	)
 	require.NoError(t, err)
@@ -771,7 +771,7 @@ func TestMetricsProcessorHostnameWithPodAssociation(t *testing.T) {
 	p, err := newMetricsProcessor(
 		NewFactory().CreateDefaultConfig(),
 		next,
-		WithExtractMetadata(metadataPodName),
+		WithExtractMetadata(conventions.AttributeK8sPod),
 		withExtractKubernetesProcessorInto(&kp),
 	)
 	require.NoError(t, err)
@@ -905,6 +905,6 @@ func TestStartStop(t *testing.T) {
 func assertResourceHasStringAttribute(t *testing.T, r pdata.Resource, k, v string) {
 	got, ok := r.Attributes().Get(k)
 	assert.True(t, ok, fmt.Sprintf("resource does not contain attribute %s", k))
-	assert.EqualValues(t, pdata.AttributeValueSTRING, got.Type(), "attribute %s is not of type string", k)
+	assert.EqualValues(t, pdata.AttributeValueTypeString, got.Type(), "attribute %s is not of type string", k)
 	assert.EqualValues(t, v, got.StringVal(), "attribute %s is not equal to %s", k, v)
 }

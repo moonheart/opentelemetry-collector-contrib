@@ -55,17 +55,17 @@ func createDefaultConfig() config.Receiver {
 
 func createMetricsReceiver(
 	_ context.Context,
-	params component.ReceiverCreateParams,
+	params component.ReceiverCreateSettings,
 	rConf config.Receiver,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 	cfg := rConf.(*Config)
 
 	ns := newNginxScraper(params.Logger, cfg)
-	scraper := scraperhelper.NewResourceMetricsScraper(cfg.ID(), ns.scrape)
+	scraper := scraperhelper.NewResourceMetricsScraper(cfg.ID(), ns.scrape, scraperhelper.WithStart(ns.start))
 
 	return scraperhelper.NewScraperControllerReceiver(
 		&cfg.ScraperControllerSettings, params.Logger, consumer,
-		scraperhelper.AddResourceMetricsScraper(scraper),
+		scraperhelper.AddScraper(scraper),
 	)
 }

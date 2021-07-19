@@ -19,7 +19,8 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/collector/consumer/pdata"
+	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
@@ -28,9 +29,9 @@ import (
 	apitrace "go.opentelemetry.io/otel/trace"
 )
 
-func pdataResourceSpansToOTSpanData(rs pdata.ResourceSpans) []*sdktrace.SpanSnapshot {
+func pdataResourceSpansToOTSpanData(rs pdata.ResourceSpans) []cloudtrace.ReadOnlySpan {
 	resource := rs.Resource()
-	var sds []*sdktrace.SpanSnapshot
+	var sds []cloudtrace.ReadOnlySpan
 	ilss := rs.InstrumentationLibrarySpans()
 	for i := 0; i < ilss.Len(); i++ {
 		ils := ilss.At(i)
@@ -48,7 +49,7 @@ func pdataSpanToOTSpanData(
 	span pdata.Span,
 	resource pdata.Resource,
 	il pdata.InstrumentationLibrary,
-) *sdktrace.SpanSnapshot {
+) spanSnapshot {
 	sc := apitrace.SpanContextConfig{
 		TraceID: span.TraceID().Bytes(),
 		SpanID:  span.SpanID().Bytes(),
@@ -65,45 +66,45 @@ func pdataSpanToOTSpanData(
 		sdkresource.WithAttributes(pdataAttributesToOTAttributes(pdata.NewAttributeMap(), resource)...),
 	)
 
-	sd := &sdktrace.SpanSnapshot{
-		SpanContext:              apitrace.NewSpanContext(sc),
-		Parent:                   apitrace.NewSpanContext(parentSc),
-		SpanKind:                 pdataSpanKindToOTSpanKind(span.Kind()),
-		StartTime:                startTime,
-		EndTime:                  endTime,
-		Name:                     span.Name(),
-		Attributes:               pdataAttributesToOTAttributes(span.Attributes(), resource),
-		Links:                    pdataLinksToOTLinks(span.Links()),
-		MessageEvents:            pdataEventsToOTMessageEvents(span.Events()),
-		DroppedAttributeCount:    int(span.DroppedAttributesCount()),
-		DroppedMessageEventCount: int(span.DroppedEventsCount()),
-		DroppedLinkCount:         int(span.DroppedLinksCount()),
-		Resource:                 r,
-	}
-	sd.InstrumentationLibrary = instrumentation.Library{
-		Name:    il.Name(),
-		Version: il.Version(),
-	}
 	status := span.Status()
-	sd.StatusCode = pdataStatusCodeToOTCode(status.Code())
-	sd.StatusMessage = status.Message()
-
-	return sd
+	return spanSnapshot{
+		spanContext:          apitrace.NewSpanContext(sc),
+		parent:               apitrace.NewSpanContext(parentSc),
+		spanKind:             pdataSpanKindToOTSpanKind(span.Kind()),
+		startTime:            startTime,
+		endTime:              endTime,
+		name:                 span.Name(),
+		attributes:           pdataAttributesToOTAttributes(span.Attributes(), resource),
+		links:                pdataLinksToOTLinks(span.Links()),
+		events:               pdataEventsToOTMessageEvents(span.Events()),
+		droppedAttributes:    int(span.DroppedAttributesCount()),
+		droppedMessageEvents: int(span.DroppedEventsCount()),
+		droppedLinks:         int(span.DroppedLinksCount()),
+		resource:             r,
+		instrumentationLibrary: instrumentation.Library{
+			Name:    il.Name(),
+			Version: il.Version(),
+		},
+		status: sdktrace.Status{
+			Code:        pdataStatusCodeToOTCode(status.Code()),
+			Description: status.Message(),
+		},
+	}
 }
 
 func pdataSpanKindToOTSpanKind(k pdata.SpanKind) apitrace.SpanKind {
 	switch k {
-	case pdata.SpanKindUNSPECIFIED:
+	case pdata.SpanKindUnspecified:
 		return apitrace.SpanKindInternal
-	case pdata.SpanKindINTERNAL:
+	case pdata.SpanKindInternal:
 		return apitrace.SpanKindInternal
-	case pdata.SpanKindSERVER:
+	case pdata.SpanKindServer:
 		return apitrace.SpanKindServer
-	case pdata.SpanKindCLIENT:
+	case pdata.SpanKindClient:
 		return apitrace.SpanKindClient
-	case pdata.SpanKindPRODUCER:
+	case pdata.SpanKindProducer:
 		return apitrace.SpanKindProducer
-	case pdata.SpanKindCONSUMER:
+	case pdata.SpanKindConsumer:
 		return apitrace.SpanKindConsumer
 	default:
 		return apitrace.SpanKindUnspecified
@@ -126,13 +127,13 @@ func pdataAttributesToOTAttributes(attrs pdata.AttributeMap, resource pdata.Reso
 	appendAttrs := func(m pdata.AttributeMap) {
 		m.Range(func(k string, v pdata.AttributeValue) bool {
 			switch v.Type() {
-			case pdata.AttributeValueSTRING:
+			case pdata.AttributeValueTypeString:
 				otAttrs = append(otAttrs, attribute.String(k, v.StringVal()))
-			case pdata.AttributeValueBOOL:
+			case pdata.AttributeValueTypeBool:
 				otAttrs = append(otAttrs, attribute.Bool(k, v.BoolVal()))
-			case pdata.AttributeValueINT:
+			case pdata.AttributeValueTypeInt:
 				otAttrs = append(otAttrs, attribute.Int64(k, v.IntVal()))
-			case pdata.AttributeValueDOUBLE:
+			case pdata.AttributeValueTypeDouble:
 				otAttrs = append(otAttrs, attribute.Float64(k, v.DoubleVal()))
 			}
 			return true
@@ -159,12 +160,12 @@ func pdataLinksToOTLinks(links pdata.SpanLinkSlice) []apitrace.Link {
 	return otLinks
 }
 
-func pdataEventsToOTMessageEvents(events pdata.SpanEventSlice) []apitrace.Event {
+func pdataEventsToOTMessageEvents(events pdata.SpanEventSlice) []sdktrace.Event {
 	size := events.Len()
-	otEvents := make([]apitrace.Event, 0, size)
+	otEvents := make([]sdktrace.Event, 0, size)
 	for i := 0; i < size; i++ {
 		event := events.At(i)
-		otEvents = append(otEvents, apitrace.Event{
+		otEvents = append(otEvents, sdktrace.Event{
 			Name:       event.Name(),
 			Attributes: pdataAttributesToOTAttributes(event.Attributes(), pdata.NewResource()),
 			Time:       time.Unix(0, int64(event.Timestamp())),

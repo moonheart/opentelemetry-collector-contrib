@@ -37,7 +37,7 @@ func TestLoadConfig(t *testing.T) {
 
 	factory := NewFactory()
 	factories.Exporters[typeStr] = factory
-	cfg, err := configtest.LoadConfigFile(t, path.Join(".", "testdata", "config.yaml"), factories)
+	cfg, err := configtest.LoadConfigAndValidate(path.Join(".", "testdata", "config.yaml"), factories)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -62,6 +62,10 @@ func TestLoadConfig(t *testing.T) {
 				MaxInterval:     1 * time.Minute,
 				MaxElapsedTime:  10 * time.Minute,
 			},
+			RemoteWriteQueue: prw.RemoteWriteQueue{
+				QueueSize:    10000,
+				NumConsumers: 5,
+			},
 			Namespace:      "test-space",
 			ExternalLabels: map[string]string{"key1": "value1", "key2": "value2"},
 			HTTPClientSettings: confighttp.HTTPClientSettings{
@@ -76,8 +80,8 @@ func TestLoadConfig(t *testing.T) {
 				WriteBufferSize: 512 * 1024,
 				Timeout:         5 * time.Second,
 				Headers: map[string]string{
-					"prometheus-remote-write-version": "0.1.0",
-					"x-scope-orgid":                   "234"},
+					"Prometheus-Remote-Write-Version": "0.1.0",
+					"X-Scope-OrgID":                   "234"},
 			},
 		},
 		AuthConfig: AuthConfig{
@@ -89,5 +93,5 @@ func TestLoadConfig(t *testing.T) {
 	// testing function equality is not supported in Go hence these will be ignored for this test
 	cfgComplete.HTTPClientSettings.CustomRoundTripper = nil
 	e1.(*Config).HTTPClientSettings.CustomRoundTripper = nil
-	assert.Equal(t, e1, cfgComplete)
+	assert.Equal(t, cfgComplete, e1)
 }

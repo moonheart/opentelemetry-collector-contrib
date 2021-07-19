@@ -56,23 +56,21 @@ func createDefaultConfig() config.Exporter {
 
 func createTracesExporter(
 	_ context.Context,
-	params component.ExporterCreateParams,
+	set component.ExporterCreateSettings,
 	cfg config.Exporter,
 ) (component.TracesExporter, error) {
 	oCfg := cfg.(*Config)
 
-	exporter, err := newTracesExporter(oCfg, params.Logger)
-	if err != nil {
-		return nil, err
-	}
+	exporter := newTracesExporter(oCfg, set.Logger)
 
 	return exporterhelper.NewTracesExporter(
 		cfg,
-		params.Logger,
+		set,
 		exporter.pushTraceData,
 		// explicitly disable since we rely on http.Client timeout logic.
 		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
 		exporterhelper.WithRetry(oCfg.RetrySettings),
 		exporterhelper.WithQueue(oCfg.QueueSettings),
-		exporterhelper.WithShutdown(exporter.Shutdown))
+		exporterhelper.WithStart(exporter.start),
+		exporterhelper.WithShutdown(exporter.shutdown))
 }

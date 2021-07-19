@@ -21,12 +21,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/confighttp"
-	"go.opentelemetry.io/collector/config/configtls"
-	"go.uber.org/zap"
 )
 
 func TestFactory(t *testing.T) {
@@ -58,21 +55,6 @@ func TestFactory(t *testing.T) {
 			wantErrMessage: "enter a valid URL for 'egress.endpoint': parse \"123.456.7.89:9090\": first path segment in URL cannot",
 		},
 		{
-			name: "Invalid config - HTTP Client creation fails",
-			config: &Config{
-				Egress: confighttp.HTTPClientSettings{
-					Endpoint: "localhost:9090",
-					TLSSetting: configtls.TLSClientSetting{
-						TLSSetting: configtls.TLSSetting{
-							CAFile: "/non/existent",
-						},
-					},
-				},
-			},
-			wantErr:        true,
-			wantErrMessage: "failed to create HTTP Client: ",
-		},
-		{
 			name:   "Valid config",
 			config: &Config{Egress: confighttp.HTTPClientSettings{Endpoint: "localhost:9090"}},
 		},
@@ -81,9 +63,7 @@ func TestFactory(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			e, err := f.CreateExtension(
 				context.Background(),
-				component.ExtensionCreateParams{
-					Logger: zap.NewNop(),
-				},
+				componenttest.NewNopExtensionCreateSettings(),
 				test.config,
 			)
 			if test.wantErr {

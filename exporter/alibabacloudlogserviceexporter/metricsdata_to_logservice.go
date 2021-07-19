@@ -21,7 +21,7 @@ import (
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 	"github.com/gogo/protobuf/proto"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 	"go.uber.org/zap"
 )
@@ -51,9 +51,13 @@ func (kv *KeyValues) Swap(i, j int) {
 	kv.keyValues[i], kv.keyValues[j] = kv.keyValues[j], kv.keyValues[i]
 }
 func (kv *KeyValues) Less(i, j int) bool { return kv.keyValues[i].Key < kv.keyValues[j].Key }
-func (kv *KeyValues) Sort()              { sort.Sort(kv) }
+
+func (kv *KeyValues) Sort() {
+	sort.Sort(kv)
+}
 
 func (kv *KeyValues) Replace(key, value string) {
+	key = sanitize(key)
 	findIndex := sort.Search(len(kv.keyValues), func(index int) bool {
 		return kv.keyValues[index].Key >= key
 	})
@@ -62,16 +66,8 @@ func (kv *KeyValues) Replace(key, value string) {
 	}
 }
 
-func (kv *KeyValues) AppendMap(mapVal map[string]string) {
-	for key, value := range mapVal {
-		kv.keyValues = append(kv.keyValues, KeyValue{
-			Key:   key,
-			Value: value,
-		})
-	}
-}
-
 func (kv *KeyValues) Append(key, value string) {
+	key = sanitize(key)
 	kv.keyValues = append(kv.keyValues, KeyValue{
 		key,
 		value,
@@ -166,7 +162,7 @@ func resourceToMetricLabels(labels *KeyValues, resource pdata.Resource) {
 	attrs.Range(func(k string, v pdata.AttributeValue) bool {
 		labels.keyValues = append(labels.keyValues, KeyValue{
 			Key:   k,
-			Value: tracetranslator.AttributeValueToString(v, false),
+			Value: tracetranslator.AttributeValueToString(v),
 		})
 		return true
 	})
@@ -344,12 +340,12 @@ func metricDataToLogServiceData(md pdata.Metric, defaultLabels KeyValues) (logs 
 		break
 	case pdata.MetricDataTypeIntGauge:
 		return intMetricsToLogs(md.Name(), md.IntGauge().DataPoints(), defaultLabels)
-	case pdata.MetricDataTypeDoubleGauge:
-		return doubleMetricsToLogs(md.Name(), md.DoubleGauge().DataPoints(), defaultLabels)
+	case pdata.MetricDataTypeGauge:
+		return doubleMetricsToLogs(md.Name(), md.Gauge().DataPoints(), defaultLabels)
 	case pdata.MetricDataTypeIntSum:
 		return intMetricsToLogs(md.Name(), md.IntSum().DataPoints(), defaultLabels)
-	case pdata.MetricDataTypeDoubleSum:
-		return doubleMetricsToLogs(md.Name(), md.DoubleSum().DataPoints(), defaultLabels)
+	case pdata.MetricDataTypeSum:
+		return doubleMetricsToLogs(md.Name(), md.Sum().DataPoints(), defaultLabels)
 	case pdata.MetricDataTypeIntHistogram:
 		return intHistogramMetricsToLogs(md.Name(), md.IntHistogram().DataPoints(), defaultLabels)
 	case pdata.MetricDataTypeHistogram:

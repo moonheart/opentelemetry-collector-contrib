@@ -26,12 +26,12 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/dimensions"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/hostmetadata"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/translation"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/internal/dimensions"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/internal/hostmetadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/internal/translation"
 	metadata "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/experimentalmetricmetadata"
 )
 
@@ -57,7 +57,6 @@ func (sme *signalfMetadataExporter) ConsumeMetadata(metadata []*metadata.Metadat
 }
 
 type signalfxExporter struct {
-	logger             *zap.Logger
 	pushMetricsData    func(ctx context.Context, md pdata.Metrics) (droppedTimeSeries int, err error)
 	pushMetadata       func(metadata []*metadata.MetadataUpdate) error
 	pushLogsData       func(ctx context.Context, ld pdata.Logs) (droppedLogRecords int, err error)
@@ -135,7 +134,6 @@ func newSignalFxExporter(
 	}
 
 	return &signalfxExporter{
-		logger:             logger,
 		pushMetricsData:    dpClient.pushMetricsData,
 		pushMetadata:       dimClient.PushMetadata,
 		hostMetadataSyncer: hms,
@@ -177,7 +175,6 @@ func newEventExporter(config *Config, logger *zap.Logger) (*signalfxExporter, er
 	}
 
 	return &signalfxExporter{
-		logger:       logger,
 		pushLogsData: eventClient.pushLogsData,
 	}, nil
 }

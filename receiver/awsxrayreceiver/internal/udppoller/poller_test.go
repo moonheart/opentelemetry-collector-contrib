@@ -138,7 +138,9 @@ func TestSuccessfullyPollPacket(t *testing.T) {
 	assert.Eventuallyf(t, func() bool {
 		select {
 		case seg, open := <-p.(*poller).segChan:
-			obsreport.EndTraceDataReceiveOp(seg.Ctx, awsxray.TypeStr, 1, nil)
+			obsrecv := obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: receiverID, Transport: Transport})
+			ctx := obsrecv.StartMetricsOp(seg.Ctx)
+			obsrecv.EndTracesOp(ctx, awsxray.TypeStr, 1, nil)
 			return open && randString.String() == string(seg.Payload)
 		default:
 			return false
@@ -285,8 +287,7 @@ func TestSocketReadIrrecoverableNetError(t *testing.T) {
 		},
 	}
 
-	longLivedCtx := obsreport.ReceiverContext(context.Background(), receiverID, Transport)
-	p.Start(longLivedCtx)
+	p.Start(context.Background())
 
 	assert.Eventuallyf(t, func() bool {
 		logs := recordedLogs.All()
@@ -322,8 +323,7 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 		},
 	}
 
-	longLivedCtx := obsreport.ReceiverContext(context.Background(), receiverID, Transport)
-	p.Start(longLivedCtx)
+	p.Start(context.Background())
 
 	assert.Eventuallyf(t, func() bool {
 		logs := recordedLogs.All()
@@ -357,8 +357,7 @@ func TestSocketGenericReadError(t *testing.T) {
 		},
 	}
 
-	longLivedCtx := obsreport.ReceiverContext(context.Background(), receiverID, Transport)
-	p.Start(longLivedCtx)
+	p.Start(context.Background())
 
 	assert.Eventuallyf(t, func() bool {
 		logs := recordedLogs.All()
@@ -437,8 +436,7 @@ func createAndOptionallyStartPoller(
 	assert.NoError(t, err, "receiver should be created")
 
 	if start {
-		longLivedCtx := obsreport.ReceiverContext(context.Background(), receiverID, Transport)
-		poller.Start(longLivedCtx)
+		poller.Start(context.Background())
 	}
 	return addr, poller, recorded
 }

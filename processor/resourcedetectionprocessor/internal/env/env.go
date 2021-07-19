@@ -27,11 +27,12 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
 )
 
+// TypeStr is type of detector.
 const TypeStr = "env"
 
 // Environment variable used by "env" to decode a resource.
@@ -47,7 +48,7 @@ var _ internal.Detector = (*Detector)(nil)
 
 type Detector struct{}
 
-func NewDetector(component.ProcessorCreateParams, internal.DetectorConfig) (internal.Detector, error) {
+func NewDetector(component.ProcessorCreateSettings, internal.DetectorConfig) (internal.Detector, error) {
 	return &Detector{}, nil
 }
 

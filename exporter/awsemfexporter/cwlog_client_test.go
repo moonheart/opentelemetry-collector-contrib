@@ -32,7 +32,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewAlwaysPassMockLogClient(putLogEventsFunc func(args mock.Arguments)) LogClient {
+func newAlwaysPassMockLogClient(putLogEventsFunc func(args mock.Arguments)) *cloudWatchLogClient {
 	logger := zap.NewNop()
 	svc := new(mockCloudWatchLogsClient)
 
@@ -291,7 +291,7 @@ func TestPutLogEvents_ThrottlingException(t *testing.T) {
 	putLogEventsOutput := &cloudwatchlogs.PutLogEventsOutput{
 		NextSequenceToken: &expectedNextSequenceToken}
 
-	throttlingException := awserr.New(ErrCodeThrottlingException, "", nil)
+	throttlingException := awserr.New(errCodeThrottlingException, "", nil)
 	svc.On("PutLogEvents", putLogEventsInput).Return(putLogEventsOutput, throttlingException).Once()
 
 	client := newCloudWatchLogClient(svc, logger)
@@ -447,8 +447,8 @@ func TestUserAgent(t *testing.T) {
 	}
 
 	session, _ := session.NewSession()
-	cwlog := NewCloudWatchLogsClient(logger, &aws.Config{}, buildInfo, session)
-	logClient := cwlog.(*cloudWatchLogClient).svc.(*cloudwatchlogs.CloudWatchLogs)
+	cwlog := newCloudWatchLogsClient(logger, &aws.Config{}, buildInfo, session)
+	logClient := cwlog.svc.(*cloudwatchlogs.CloudWatchLogs)
 
 	req := request.New(aws.Config{}, metadata.ClientInfo{}, logClient.Handlers, nil, &request.Operation{
 		HTTPMethod: "GET",

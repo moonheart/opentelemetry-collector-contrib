@@ -23,7 +23,7 @@ import (
 
 	"go.elastic.co/apm/model"
 	"go.elastic.co/fastjson"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 )
 
 // EncodeMetrics encodes an OpenTelemetry metrics slice, and instrumentation
@@ -51,8 +51,8 @@ func EncodeMetrics(otlpMetrics pdata.MetricSlice, otlpLibrary pdata.Instrumentat
 					}},
 				})
 			}
-		case pdata.MetricDataTypeDoubleGauge:
-			doubleGauge := metric.DoubleGauge()
+		case pdata.MetricDataTypeGauge:
+			doubleGauge := metric.Gauge()
 			dps := doubleGauge.DataPoints()
 			for i := 0; i < dps.Len(); i++ {
 				dp := dps.At(i)
@@ -77,8 +77,8 @@ func EncodeMetrics(otlpMetrics pdata.MetricSlice, otlpLibrary pdata.Instrumentat
 					}},
 				})
 			}
-		case pdata.MetricDataTypeDoubleSum:
-			doubleSum := metric.DoubleSum()
+		case pdata.MetricDataTypeSum:
+			doubleSum := metric.Sum()
 			dps := doubleSum.DataPoints()
 			for i := 0; i < dps.Len(); i++ {
 				dp := dps.At(i)

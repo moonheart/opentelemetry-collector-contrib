@@ -31,10 +31,8 @@ func TestLoadConfig(t *testing.T) {
 	assert.Nil(t, err)
 
 	factory := NewFactory()
-	factories.Receivers[config.Type(typeStr)] = factory
-	cfg, err := configtest.LoadConfigFile(
-		t, path.Join(".", "testdata", "config.yaml"), factories,
-	)
+	factories.Receivers[typeStr] = factory
+	cfg, err := configtest.LoadConfigAndValidate(path.Join(".", "testdata", "config.yaml"), factories)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -54,5 +52,7 @@ func TestLoadConfig(t *testing.T) {
 			ReceiverSettings:      config.NewReceiverSettings(config.NewIDWithName(typeStr, "collection_interval_settings")),
 			CollectionInterval:    60 * time.Second,
 			ContainerOrchestrator: "eks",
+			TagService:            true,
+			PrefFullPodName:       false,
 		})
 }

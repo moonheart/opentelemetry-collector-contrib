@@ -27,7 +27,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-log-collection/operator/helper"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 )
 
 // This file implements some useful testing components
@@ -119,7 +119,7 @@ type TestConfig struct {
 type TestReceiverType struct{}
 
 func (f TestReceiverType) Type() config.Type {
-	return config.Type(testType)
+	return testType
 }
 
 func (f TestReceiverType) CreateDefaultConfig() config.Receiver {
@@ -189,5 +189,12 @@ func (p *mockClient) Delete(_ context.Context, key string) error {
 	p.cacheMux.Lock()
 	defer p.cacheMux.Unlock()
 	delete(p.cache, key)
+	return nil
+}
+
+func (p *mockClient) Close(_ context.Context) error {
+	p.cacheMux.Lock()
+	defer p.cacheMux.Unlock()
+	p.cache = nil
 	return nil
 }

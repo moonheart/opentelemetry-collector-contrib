@@ -21,7 +21,7 @@ import (
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/libhoney-go/transmission"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 )
 
@@ -176,17 +176,17 @@ func (e *honeycombExporter) pushTraceData(ctx context.Context, td pdata.Traces) 
 
 func getSpanKind(kind pdata.SpanKind) string {
 	switch kind {
-	case pdata.SpanKindCLIENT:
+	case pdata.SpanKindClient:
 		return "client"
-	case pdata.SpanKindSERVER:
+	case pdata.SpanKindServer:
 		return "server"
-	case pdata.SpanKindPRODUCER:
+	case pdata.SpanKindProducer:
 		return "producer"
-	case pdata.SpanKindCONSUMER:
+	case pdata.SpanKindConsumer:
 		return "consumer"
-	case pdata.SpanKindINTERNAL:
+	case pdata.SpanKindInternal:
 		return "internal"
-	case pdata.SpanKindUNSPECIFIED:
+	case pdata.SpanKindUnspecified:
 		fallthrough
 	default:
 		return "unspecified"

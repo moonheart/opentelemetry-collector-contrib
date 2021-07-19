@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 )
 
@@ -57,9 +57,9 @@ func TestMetricDataToLogService(t *testing.T) {
 	intGaugeDataPoint.SetTimestamp(pdata.Timestamp(100_000_000))
 
 	doubleGaugeMetric := metrics.AppendEmpty()
-	doubleGaugeMetric.SetDataType(pdata.MetricDataTypeDoubleGauge)
+	doubleGaugeMetric.SetDataType(pdata.MetricDataTypeGauge)
 	doubleGaugeMetric.SetName("double_gauge")
-	doubleGauge := doubleGaugeMetric.DoubleGauge()
+	doubleGauge := doubleGaugeMetric.Gauge()
 	doubleGaugeDataPoints := doubleGauge.DataPoints()
 	doubleGaugeDataPoint := doubleGaugeDataPoints.AppendEmpty()
 	doubleGaugeDataPoint.LabelsMap().Insert("innerLabel", "innerValue")
@@ -77,9 +77,9 @@ func TestMetricDataToLogService(t *testing.T) {
 	intSumDataPoint.SetTimestamp(pdata.Timestamp(100_000_000))
 
 	doubleSumMetric := metrics.AppendEmpty()
-	doubleSumMetric.SetDataType(pdata.MetricDataTypeDoubleSum)
+	doubleSumMetric.SetDataType(pdata.MetricDataTypeSum)
 	doubleSumMetric.SetName("double_sum")
-	doubleSum := doubleSumMetric.DoubleSum()
+	doubleSum := doubleSumMetric.Sum()
 	doubleSumDataPoints := doubleSum.DataPoints()
 	doubleSumDataPoint := doubleSumDataPoints.AppendEmpty()
 	doubleSumDataPoint.LabelsMap().Insert("innerLabel", "innerValue")
@@ -165,8 +165,17 @@ func TestMetricCornerCases(t *testing.T) {
 	assert.Equal(t, min(2, 1), 1)
 	assert.Equal(t, min(1, 1), 1)
 	var label KeyValues
-	label.AppendMap(map[string]string{
-		"a": "b",
-	})
+	label.Append("a", "b")
 	assert.Equal(t, label.String(), "a#$#b")
+}
+
+func TestMetricLabelSanitize(t *testing.T) {
+	var label KeyValues
+	label.Append("_test", "key_test")
+	label.Append("0test", "key_0test")
+	label.Append("test_normal", "test_normal")
+	label.Append("0test", "key_0test")
+	assert.Equal(t, label.String(), "key_test#$#key_test|key_0test#$#key_0test|test_normal#$#test_normal|key_0test#$#key_0test")
+	label.Sort()
+	assert.Equal(t, label.String(), "key_0test#$#key_0test|key_0test#$#key_0test|key_test#$#key_test|test_normal#$#test_normal")
 }

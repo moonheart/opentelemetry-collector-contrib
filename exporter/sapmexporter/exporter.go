@@ -23,8 +23,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/trace/jaeger"
 	"go.uber.org/zap"
 
@@ -50,7 +50,7 @@ func (se *sapmExporter) Shutdown(context.Context) error {
 	return nil
 }
 
-func newSAPMExporter(cfg *Config, params component.ExporterCreateParams) (sapmExporter, error) {
+func newSAPMExporter(cfg *Config, params component.ExporterCreateSettings) (sapmExporter, error) {
 	err := cfg.validate()
 	if err != nil {
 		return sapmExporter{}, err
@@ -68,15 +68,15 @@ func newSAPMExporter(cfg *Config, params component.ExporterCreateParams) (sapmEx
 	}, err
 }
 
-func newSAPMTracesExporter(cfg *Config, params component.ExporterCreateParams) (component.TracesExporter, error) {
-	se, err := newSAPMExporter(cfg, params)
+func newSAPMTracesExporter(cfg *Config, set component.ExporterCreateSettings) (component.TracesExporter, error) {
+	se, err := newSAPMExporter(cfg, set)
 	if err != nil {
 		return nil, err
 	}
 
 	te, err := exporterhelper.NewTracesExporter(
 		cfg,
-		params.Logger,
+		set,
 		se.pushTraceData,
 		exporterhelper.WithShutdown(se.Shutdown),
 		exporterhelper.WithQueue(cfg.QueueSettings),

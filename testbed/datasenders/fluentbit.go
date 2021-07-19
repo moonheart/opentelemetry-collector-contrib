@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/testbed/testbed"
 )
 
@@ -113,13 +113,13 @@ func (f *FluentBitFileLogWriter) convertLogToJSON(lr pdata.LogRecord) []byte {
 
 	lr.Attributes().Range(func(k string, v pdata.AttributeValue) bool {
 		switch v.Type() {
-		case pdata.AttributeValueSTRING:
+		case pdata.AttributeValueTypeString:
 			rec[k] = v.StringVal()
-		case pdata.AttributeValueINT:
+		case pdata.AttributeValueTypeInt:
 			rec[k] = strconv.FormatInt(v.IntVal(), 10)
-		case pdata.AttributeValueDOUBLE:
+		case pdata.AttributeValueTypeDouble:
 			rec[k] = strconv.FormatFloat(v.DoubleVal(), 'f', -1, 64)
-		case pdata.AttributeValueBOOL:
+		case pdata.AttributeValueTypeBool:
 			rec[k] = strconv.FormatBool(v.BoolVal())
 		default:
 			panic("missing case")

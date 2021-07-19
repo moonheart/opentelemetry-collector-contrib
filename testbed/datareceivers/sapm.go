@@ -48,8 +48,8 @@ func (sr *SapmDataReceiver) Start(tc consumer.Traces, _ consumer.Metrics, _ cons
 		AccessTokenPassthroughConfig: splunk.AccessTokenPassthroughConfig{AccessTokenPassthrough: true},
 	}
 	var err error
-	params := component.ReceiverCreateParams{Logger: zap.L()}
-	sr.receiver, err = sapmreceiver.New(context.Background(), params, &sapmCfg, tc)
+	params := component.ReceiverCreateSettings{Logger: zap.L()}
+	sr.receiver, err = sapmreceiver.NewFactory().CreateTracesReceiver(context.Background(), params, &sapmCfg, tc)
 	if err != nil {
 		return err
 	}

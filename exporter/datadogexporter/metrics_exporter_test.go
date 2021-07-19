@@ -21,13 +21,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confignet"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/config"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/metadata"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/testutils"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/testutils"
 )
 
 func TestNewExporter(t *testing.T) {
@@ -44,7 +43,7 @@ func TestNewExporter(t *testing.T) {
 			},
 		},
 	}
-	params := component.ExporterCreateParams{Logger: zap.NewNop()}
+	params := componenttest.NewNopExporterCreateSettings()
 
 	// The client should have been created correctly
 	exp := newMetricsExporter(context.Background(), params, cfg)

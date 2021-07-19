@@ -7,6 +7,8 @@ This exporter sends metric and trace data to [Datadog](https://datadoghq.com). F
 > which contains recommendations on securing sensitive information such as the
 > API key required by this exporter.
 
+> **Note**: The metrics exporter is not considered stable yet and may suffer breaking changes.
+
 ## Configuration
 
 The only required setting is a [Datadog API key](https://app.datadoghq.com/account/settings#api).
@@ -84,5 +86,6 @@ There are a number of optional settings for configuring how to send your metrics
 
 | Option name | Description | Default |
 |-|-|-|
-| `send_monotonic_counters` | Cumulative monotonic metrics are sent as deltas between successive measurements. Disable this flag to send get the raw, monotonically increasing value. | `true` |
+| `send_monotonic_counter` | Cumulative monotonic metrics are sent as deltas between successive measurements. Disable this flag to send get the raw, monotonically increasing value. | `true` |
 | `delta_ttl` | Maximum number of seconds values from cumulative monotonic metrics are kept in memory. | 3600 |
+| `report_quantiles` | Whether to report quantile values for summary type metrics. | `true` |

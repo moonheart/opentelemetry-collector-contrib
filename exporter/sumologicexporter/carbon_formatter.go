@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 )
 
@@ -45,7 +45,7 @@ func carbon2TagString(record metricPair) string {
 		returnValue = append(returnValue, fmt.Sprintf(
 			"%s=%s",
 			sanitizeCarbonString(k),
-			sanitizeCarbonString(tracetranslator.AttributeValueToString(v, false)),
+			sanitizeCarbonString(tracetranslator.AttributeValueToString(v)),
 		))
 		return true
 	})
@@ -101,14 +101,14 @@ func carbon2Metric2String(record metricPair) string {
 		for i := 0; i < dps.Len(); i++ {
 			nextLines = append(nextLines, carbon2IntRecord(record, dps.At(i)))
 		}
-	case pdata.MetricDataTypeDoubleGauge:
-		dps := record.metric.DoubleGauge().DataPoints()
+	case pdata.MetricDataTypeGauge:
+		dps := record.metric.Gauge().DataPoints()
 		nextLines = make([]string, 0, dps.Len())
 		for i := 0; i < dps.Len(); i++ {
 			nextLines = append(nextLines, carbon2DoubleRecord(record, dps.At(i)))
 		}
-	case pdata.MetricDataTypeDoubleSum:
-		dps := record.metric.DoubleSum().DataPoints()
+	case pdata.MetricDataTypeSum:
+		dps := record.metric.Sum().DataPoints()
 		nextLines = make([]string, 0, dps.Len())
 		for i := 0; i < dps.Len(); i++ {
 			nextLines = append(nextLines, carbon2DoubleRecord(record, dps.At(i)))

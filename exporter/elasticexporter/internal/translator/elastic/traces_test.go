@@ -24,7 +24,7 @@ import (
 	"go.elastic.co/apm/model"
 	"go.elastic.co/apm/transport/transporttest"
 	"go.elastic.co/fastjson"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/elasticexporter/internal/translator/elastic"
 )
@@ -55,7 +55,7 @@ func TestEncodeSpan(t *testing.T) {
 	clientSpan := pdata.NewSpan()
 	clientSpan.SetSpanID(pdata.NewSpanID(clientSpanID))
 	clientSpan.SetParentSpanID(pdata.NewSpanID(rootTransactionID))
-	clientSpan.SetKind(pdata.SpanKindCLIENT)
+	clientSpan.SetKind(pdata.SpanKindClient)
 	clientSpan.SetName("client_span")
 	clientSpan.Status().SetCode(pdata.StatusCodeError)
 	clientSpan.Attributes().InitFromMap(map[string]pdata.AttributeValue{
@@ -68,7 +68,7 @@ func TestEncodeSpan(t *testing.T) {
 	serverSpan := pdata.NewSpan()
 	serverSpan.SetSpanID(pdata.NewSpanID(serverTransactionID))
 	serverSpan.SetParentSpanID(pdata.NewSpanID(clientSpanID))
-	serverSpan.SetKind(pdata.SpanKindSERVER)
+	serverSpan.SetKind(pdata.SpanKindServer)
 	serverSpan.SetName("server_span")
 	serverSpan.Status().SetCode(pdata.StatusCodeOk)
 

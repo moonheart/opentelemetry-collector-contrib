@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	semconventions "go.opentelemetry.io/collector/translator/conventions"
 )
 
@@ -83,16 +83,16 @@ func loadFromJSON(file string, obj interface{}) error {
 
 func constructSpanData() pdata.Traces {
 	traces := pdata.NewTraces()
-	traces.ResourceSpans().Resize(2)
-	rspans := traces.ResourceSpans().At(0)
+	traces.ResourceSpans().EnsureCapacity(1)
+	rspans := traces.ResourceSpans().AppendEmpty()
 	fillResource(rspans.Resource())
-	rspans.InstrumentationLibrarySpans().Resize(2)
-	ispans := rspans.InstrumentationLibrarySpans().At(0)
+	rspans.InstrumentationLibrarySpans().EnsureCapacity(1)
+	ispans := rspans.InstrumentationLibrarySpans().AppendEmpty()
 	ispans.InstrumentationLibrary().SetName("golang-sls-exporter")
 	ispans.InstrumentationLibrary().SetVersion("v0.1.0")
-	ispans.Spans().Resize(2)
-	fillHTTPClientSpan(ispans.Spans().At(0))
-	fillHTTPServerSpan(ispans.Spans().At(1))
+	ispans.Spans().EnsureCapacity(2)
+	fillHTTPClientSpan(ispans.Spans().AppendEmpty())
+	fillHTTPServerSpan(ispans.Spans().AppendEmpty())
 	return traces
 }
 
@@ -122,7 +122,7 @@ func fillHTTPClientSpan(span pdata.Span) {
 	span.SetSpanID(newSegmentID())
 	span.SetParentSpanID(newSegmentID())
 	span.SetName("/users/junit")
-	span.SetKind(pdata.SpanKindCLIENT)
+	span.SetKind(pdata.SpanKindClient)
 	span.SetStartTimestamp(pdata.TimestampFromTime(startTime))
 	span.SetEndTimestamp(pdata.TimestampFromTime(endTime))
 	span.SetTraceState("x:y")
@@ -155,7 +155,7 @@ func fillHTTPServerSpan(span pdata.Span) {
 	span.SetSpanID(newSegmentID())
 	span.SetParentSpanID(newSegmentID())
 	span.SetName("/users/junit")
-	span.SetKind(pdata.SpanKindSERVER)
+	span.SetKind(pdata.SpanKindServer)
 	span.SetStartTimestamp(pdata.TimestampFromTime(startTime))
 	span.SetEndTimestamp(pdata.TimestampFromTime(endTime))
 
@@ -189,12 +189,12 @@ func newSegmentID() pdata.SpanID {
 }
 
 func TestSpanKindToShortString(t *testing.T) {
-	assert.Equal(t, spanKindToShortString(pdata.SpanKindCONSUMER), "consumer")
-	assert.Equal(t, spanKindToShortString(pdata.SpanKindPRODUCER), "producer")
-	assert.Equal(t, spanKindToShortString(pdata.SpanKindCLIENT), "client")
-	assert.Equal(t, spanKindToShortString(pdata.SpanKindSERVER), "server")
-	assert.Equal(t, spanKindToShortString(pdata.SpanKindINTERNAL), "internal")
-	assert.Equal(t, spanKindToShortString(pdata.SpanKindUNSPECIFIED), "")
+	assert.Equal(t, spanKindToShortString(pdata.SpanKindConsumer), "consumer")
+	assert.Equal(t, spanKindToShortString(pdata.SpanKindProducer), "producer")
+	assert.Equal(t, spanKindToShortString(pdata.SpanKindClient), "client")
+	assert.Equal(t, spanKindToShortString(pdata.SpanKindServer), "server")
+	assert.Equal(t, spanKindToShortString(pdata.SpanKindInternal), "internal")
+	assert.Equal(t, spanKindToShortString(pdata.SpanKindUnspecified), "")
 }
 
 func TestStatusCodeToShortString(t *testing.T) {

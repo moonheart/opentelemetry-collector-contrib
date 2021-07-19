@@ -40,7 +40,7 @@ common: checklicense checkdoc impi lint misspell
 
 .PHONY: test
 test:
-	$(GOTEST) ./...
+	$(GOTEST) $(GOTEST_OPT) ./...
 
 .PHONY: do-unit-tests-with-cover
 do-unit-tests-with-cover:
@@ -48,7 +48,7 @@ do-unit-tests-with-cover:
 	@$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...
 	go tool cover -html=coverage.txt -o coverage.html
 
-.PHONY: run-integration-tests-with-cover
+.PHONY: do-integration-tests-with-cover
 do-integration-tests-with-cover:
 	@echo "running go integration test ./... + coverage in `pwd`"
 	@$(GOTEST) $(GOTEST_OPT_WITH_INTEGRATION) ./...

@@ -32,7 +32,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenterror"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/translator/conventions"
 	"go.uber.org/zap"
@@ -84,6 +84,7 @@ type sfxReceiver struct {
 	metricsConsumer consumer.Metrics
 	logsConsumer    consumer.Logs
 	server          *http.Server
+	obsrecv         *obsreport.Receiver
 }
 
 var _ component.MetricsReceiver = (*sfxReceiver)(nil)
@@ -93,9 +94,14 @@ func newReceiver(
 	logger *zap.Logger,
 	config Config,
 ) *sfxReceiver {
+	transport := "http"
+	if config.TLSSetting != nil {
+		transport = "https"
+	}
 	r := &sfxReceiver{
-		logger: logger,
-		config: &config,
+		logger:  logger,
+		config:  &config,
+		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: config.ID(), Transport: transport}),
 	}
 
 	return r
@@ -206,13 +212,7 @@ func (r *sfxReceiver) writeResponse(ctx context.Context, resp http.ResponseWrite
 }
 
 func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Request) {
-	transport := "http"
-	if r.config.TLSSetting != nil {
-		transport = "https"
-	}
-
-	ctx := obsreport.ReceiverContext(req.Context(), r.config.ID(), transport)
-	ctx = obsreport.StartMetricsReceiveOp(ctx, r.config.ID(), transport)
+	ctx := r.obsrecv.StartMetricsOp(req.Context())
 
 	if r.metricsConsumer == nil {
 		r.failRequest(ctx, resp, http.StatusBadRequest, errMetricsNotConfigured, nil)
@@ -231,7 +231,7 @@ func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Req
 	}
 
 	if len(msg.Datapoints) == 0 {
-		obsreport.EndMetricsReceiveOp(ctx, typeStr, 0, nil)
+		r.obsrecv.EndMetricsOp(ctx, typeStr, 0, nil)
 		resp.Write(okRespBody)
 		return
 	}
@@ -249,7 +249,7 @@ func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Req
 	}
 
 	err := r.metricsConsumer.ConsumeMetrics(ctx, md)
-	obsreport.EndMetricsReceiveOp(
+	r.obsrecv.EndMetricsOp(
 		ctx,
 		typeStr,
 		len(msg.Datapoints),
@@ -259,13 +259,7 @@ func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Req
 }
 
 func (r *sfxReceiver) handleEventReq(resp http.ResponseWriter, req *http.Request) {
-	transport := "http"
-	if r.config.TLSSetting != nil {
-		transport = "https"
-	}
-
-	ctx := obsreport.ReceiverContext(req.Context(), r.config.ID(), transport)
-	ctx = obsreport.StartMetricsReceiveOp(ctx, r.config.ID(), transport)
+	ctx := r.obsrecv.StartMetricsOp(req.Context())
 
 	if r.logsConsumer == nil {
 		r.failRequest(ctx, resp, http.StatusBadRequest, errLogsNotConfigured, nil)
@@ -284,7 +278,7 @@ func (r *sfxReceiver) handleEventReq(resp http.ResponseWriter, req *http.Request
 	}
 
 	if len(msg.Events) == 0 {
-		obsreport.EndMetricsReceiveOp(ctx, typeStr, 0, nil)
+		r.obsrecv.EndMetricsOp(ctx, typeStr, 0, nil)
 		resp.Write(okRespBody)
 		return
 	}
@@ -301,7 +295,7 @@ func (r *sfxReceiver) handleEventReq(resp http.ResponseWriter, req *http.Request
 	}
 
 	err := r.logsConsumer.ConsumeLogs(ctx, ld)
-	obsreport.EndMetricsReceiveOp(
+	r.obsrecv.EndMetricsOp(
 		ctx,
 		typeStr,
 		len(msg.Events),

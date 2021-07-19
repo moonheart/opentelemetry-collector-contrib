@@ -18,7 +18,7 @@ import (
 	"context"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 	"go.uber.org/zap"
 
@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	// TypeStr is the detector type string
+	// TypeStr is type of detector.
 	TypeStr = "azure"
 )
 
@@ -39,7 +39,7 @@ type Detector struct {
 }
 
 // NewDetector creates a new Azure metadata detector
-func NewDetector(p component.ProcessorCreateParams, cfg internal.DetectorConfig) (internal.Detector, error) {
+func NewDetector(p component.ProcessorCreateSettings, cfg internal.DetectorConfig) (internal.Detector, error) {
 	return &Detector{
 		provider: NewProvider(),
 		logger:   p.Logger,

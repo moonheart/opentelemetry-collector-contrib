@@ -27,13 +27,13 @@ import (
 )
 
 const (
-	InstrumentationLibName = "otelcol/kafkametrics"
+	instrumentationLibName = "otelcol/kafkametrics"
 	brokersScraperName     = "brokers"
 	topicsScraperName      = "topics"
 	consumersScraperName   = "consumers"
 )
 
-type createKafkaScraper func(context.Context, Config, *sarama.Config, *zap.Logger) (scraperhelper.ResourceMetricsScraper, error)
+type createKafkaScraper func(context.Context, Config, *sarama.Config, *zap.Logger) (scraperhelper.Scraper, error)
 
 var (
 	allScrapers = map[string]createKafkaScraper{
@@ -46,7 +46,7 @@ var (
 var newMetricsReceiver = func(
 	ctx context.Context,
 	config Config,
-	params component.ReceiverCreateParams,
+	params component.ReceiverCreateSettings,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 	sc := sarama.NewConfig()
@@ -68,7 +68,7 @@ var newMetricsReceiver = func(
 			if err != nil {
 				return nil, err
 			}
-			scraperControllerOptions = append(scraperControllerOptions, scraperhelper.AddResourceMetricsScraper(s))
+			scraperControllerOptions = append(scraperControllerOptions, scraperhelper.AddScraper(s))
 			continue
 		}
 		return nil, fmt.Errorf("no scraper found for key: %s", scraper)

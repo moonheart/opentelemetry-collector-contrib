@@ -26,12 +26,14 @@ import (
 	"time"
 
 	"github.com/open-telemetry/opentelemetry-log-collection/entry"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 )
 
 const (
+	// DefaultFlushInterval is the default flush interval.
 	DefaultFlushInterval = 100 * time.Millisecond
+	// DefaultMaxFlushCount is the default max flush count.
 	DefaultMaxFlushCount = 100
 )
 
@@ -194,7 +196,7 @@ func (c *Converter) Stop() {
 	})
 }
 
-// Channel returns the channel on which converted entries will be sent to.
+// OutChannel returns the channel on which converted entries will be sent to.
 func (c *Converter) OutChannel() <-chan pdata.Logs {
 	return c.pLogsChan
 }
@@ -267,14 +269,14 @@ func (c *Converter) batchLoop() {
 
 			pLogs, ok := c.data[wi.ResourceString]
 			if ok {
-				pLogs.ResourceLogs().
+				lr := pLogs.ResourceLogs().
 					At(0).InstrumentationLibraryLogs().
-					At(0).Logs().Append(wi.LogRecord)
+					At(0).Logs().AppendEmpty()
+				wi.LogRecord.CopyTo(lr)
 			} else {
 				pLogs = pdata.NewLogs()
 				logs := pLogs.ResourceLogs()
-				logs.Resize(1)
-				rls := logs.At(0)
+				rls := logs.AppendEmpty()
 
 				resource := rls.Resource()
 				resourceAtts := resource.Attributes()
@@ -284,8 +286,8 @@ func (c *Converter) batchLoop() {
 				}
 
 				ills := rls.InstrumentationLibraryLogs()
-				ills.Resize(1)
-				ills.At(0).Logs().Append(wi.LogRecord)
+				lr := ills.AppendEmpty().Logs().AppendEmpty()
+				wi.LogRecord.CopyTo(lr)
 			}
 
 			c.data[wi.ResourceString] = pLogs
@@ -344,7 +346,7 @@ func (c *Converter) flush(ctx context.Context, pLogs pdata.Logs) error {
 
 	// The converter has been stopped so bail the flush.
 	case <-c.stopChan:
-		return errors.New("Logs converter has been stopped")
+		return errors.New("logs converter has been stopped")
 	}
 
 	return nil
@@ -356,7 +358,7 @@ func (c *Converter) Batch(e *entry.Entry) error {
 	case c.workerChan <- e:
 		return nil
 	case <-c.stopChan:
-		return errors.New("Logs converter has been stopped")
+		return errors.New("logs converter has been stopped")
 	}
 }
 
@@ -520,9 +522,9 @@ func toAttributeMap(obsMap map[string]interface{}) pdata.AttributeValue {
 func toAttributeArray(obsArr []interface{}) pdata.AttributeValue {
 	arrVal := pdata.NewAttributeValueArray()
 	arr := arrVal.ArrayVal()
-	arr.Resize(len(obsArr))
-	for i, v := range obsArr {
-		insertToAttributeVal(v, arr.At(i))
+	arr.EnsureCapacity(len(obsArr))
+	for _, v := range obsArr {
+		insertToAttributeVal(v, arr.AppendEmpty())
 	}
 	return arrVal
 }

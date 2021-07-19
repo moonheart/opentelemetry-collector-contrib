@@ -27,8 +27,8 @@ import (
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/batchpersignal"
@@ -50,10 +50,10 @@ type traceExporterImp struct {
 }
 
 // Create new traces exporter
-func newTracesExporter(params component.ExporterCreateParams, cfg config.Exporter) (*traceExporterImp, error) {
+func newTracesExporter(params component.ExporterCreateSettings, cfg config.Exporter) (*traceExporterImp, error) {
 	exporterFactory := otlpexporter.NewFactory()
 
-	tmplParams := component.ExporterCreateParams{
+	tmplParams := component.ExporterCreateSettings{
 		Logger:    params.Logger,
 		BuildInfo: params.BuildInfo,
 	}
@@ -84,11 +84,7 @@ func (e *traceExporterImp) Capabilities() consumer.Capabilities {
 }
 
 func (e *traceExporterImp) Start(ctx context.Context, host component.Host) error {
-	if err := e.loadBalancer.Start(ctx, host); err != nil {
-		return err
-	}
-
-	return nil
+	return e.loadBalancer.Start(ctx, host)
 }
 
 func (e *traceExporterImp) Shutdown(context.Context) error {

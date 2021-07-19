@@ -26,8 +26,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confighttp"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 )
 
 type senderTest struct {
@@ -73,6 +74,9 @@ func prepareSenderTest(t *testing.T, cb []func(w http.ResponseWriter, req *http.
 	require.NoError(t, err)
 
 	gf, err := newGraphiteFormatter(DefaultGraphiteTemplate)
+	require.NoError(t, err)
+
+	err = exp.start(context.Background(), componenttest.NewNopHost())
 	require.NoError(t, err)
 
 	return &senderTest{
@@ -162,8 +166,10 @@ func exampleMultitypeLogs() []pdata.LogRecord {
 	intVal := pdata.NewAttributeValueNull()
 	intVal.SetIntVal(13)
 
-	attArr.Append(strVal)
-	attArr.Append(intVal)
+	strTgt := attArr.AppendEmpty()
+	strVal.CopyTo(strTgt)
+	intTgt := attArr.AppendEmpty()
+	intVal.CopyTo(intTgt)
 
 	attVal.CopyTo(buffer[1].Body())
 	buffer[1].Attributes().InsertString("key1", "value1")

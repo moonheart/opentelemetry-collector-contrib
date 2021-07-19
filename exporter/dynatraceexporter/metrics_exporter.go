@@ -26,7 +26,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/dynatraceexporter/config"
@@ -37,16 +37,11 @@ import (
 const maxChunkSize = 1000
 
 // NewExporter exports to a Dynatrace Metrics v2 API
-func newMetricsExporter(params component.ExporterCreateParams, cfg *config.Config) (*exporter, error) {
-	client, err := cfg.HTTPClientSettings.ToClient()
-	if err != nil {
-		return nil, err
-	}
+func newMetricsExporter(params component.ExporterCreateSettings, cfg *config.Config) *exporter {
 	return &exporter{
 		logger: params.Logger,
 		cfg:    cfg,
-		client: client,
-	}, nil
+	}
 }
 
 // exporter forwards metrics to a Dynatrace agent
@@ -112,12 +107,12 @@ func (e *exporter) serializeMetrics(md pdata.Metrics) ([]string, int) {
 					continue
 				case pdata.MetricDataTypeIntGauge:
 					l = serialization.SerializeIntDataPoints(name, metric.IntGauge().DataPoints(), e.cfg.Tags)
-				case pdata.MetricDataTypeDoubleGauge:
-					l = serialization.SerializeDoubleDataPoints(name, metric.DoubleGauge().DataPoints(), e.cfg.Tags)
+				case pdata.MetricDataTypeGauge:
+					l = serialization.SerializeDoubleDataPoints(name, metric.Gauge().DataPoints(), e.cfg.Tags)
 				case pdata.MetricDataTypeIntSum:
 					l = serialization.SerializeIntDataPoints(name, metric.IntSum().DataPoints(), e.cfg.Tags)
-				case pdata.MetricDataTypeDoubleSum:
-					l = serialization.SerializeDoubleDataPoints(name, metric.DoubleSum().DataPoints(), e.cfg.Tags)
+				case pdata.MetricDataTypeSum:
+					l = serialization.SerializeDoubleDataPoints(name, metric.Sum().DataPoints(), e.cfg.Tags)
 				case pdata.MetricDataTypeIntHistogram:
 					l = serialization.SerializeIntHistogramMetrics(name, metric.IntHistogram().DataPoints(), e.cfg.Tags)
 				case pdata.MetricDataTypeHistogram:
@@ -132,7 +127,7 @@ func (e *exporter) serializeMetrics(md pdata.Metrics) ([]string, int) {
 	return lines, dropped
 }
 
-var lastLog int64 = 0
+var lastLog int64
 
 // send sends a serialized metric batch to Dynatrace.
 // Returns the number of lines rejected by Dynatrace.
@@ -230,6 +225,18 @@ func (e *exporter) sendBatch(ctx context.Context, lines []string) (int, error) {
 
 	// No known errors
 	return 0, nil
+}
+
+// start starts the exporter
+func (e *exporter) start(_ context.Context, host component.Host) (err error) {
+	client, err := e.cfg.HTTPClientSettings.ToClient(host.GetExtensions())
+	if err != nil {
+		return err
+	}
+
+	e.client = client
+
+	return nil
 }
 
 // normalizeMetricName formats the custom namespace and view name to

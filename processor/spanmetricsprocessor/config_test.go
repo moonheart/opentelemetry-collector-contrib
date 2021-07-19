@@ -46,6 +46,8 @@ func TestLoadConfig(t *testing.T) {
 			configFile:          "config-full.yaml",
 			wantMetricsExporter: "otlp/spanmetrics",
 			wantLatencyHistogramBuckets: []time.Duration{
+				100 * time.Microsecond,
+				1 * time.Millisecond,
 				2 * time.Millisecond,
 				6 * time.Millisecond,
 				10 * time.Millisecond,
@@ -75,7 +77,7 @@ func TestLoadConfig(t *testing.T) {
 			factories.Exporters["jaeger"] = jaegerexporter.NewFactory()
 
 			// Test
-			cfg, err := configtest.LoadConfigFile(t, path.Join(".", "testdata", tc.configFile), factories)
+			cfg, err := configtest.LoadConfigAndValidate(path.Join(".", "testdata", tc.configFile), factories)
 
 			// Verify
 			require.NoError(t, err)

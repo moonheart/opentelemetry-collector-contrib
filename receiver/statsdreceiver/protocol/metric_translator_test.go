@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 )
 
 func TestBuildCounterMetric(t *testing.T) {
@@ -66,8 +66,8 @@ func TestBuildGaugeMetric(t *testing.T) {
 	expectedMetric := expectedMetrics.Metrics().AppendEmpty()
 	expectedMetric.SetName("testGauge")
 	expectedMetric.SetUnit("meter")
-	expectedMetric.SetDataType(pdata.MetricDataTypeDoubleGauge)
-	dp := expectedMetric.DoubleGauge().DataPoints().AppendEmpty()
+	expectedMetric.SetDataType(pdata.MetricDataTypeGauge)
+	dp := expectedMetric.Gauge().DataPoints().AppendEmpty()
 	dp.SetValue(32.3)
 	dp.SetTimestamp(pdata.TimestampFromTime(timeNow))
 	dp.LabelsMap().Insert("mykey", "myvalue")
@@ -88,21 +88,23 @@ func TestBuildSummaryMetric(t *testing.T) {
 
 	metric := buildSummaryMetric(oneSummaryMetric)
 	expectedMetric := pdata.NewInstrumentationLibraryMetrics()
-	expectedMetric.Metrics().Resize(1)
-	expectedMetric.Metrics().At(0).SetName("testSummary")
-	expectedMetric.Metrics().At(0).SetDataType(pdata.MetricDataTypeSummary)
-	expectedMetric.Metrics().At(0).Summary().DataPoints().Resize(1)
-	expectedMetric.Metrics().At(0).Summary().DataPoints().At(0).SetSum(21)
-	expectedMetric.Metrics().At(0).Summary().DataPoints().At(0).SetCount(6)
-	expectedMetric.Metrics().At(0).Summary().DataPoints().At(0).SetTimestamp(pdata.TimestampFromTime(timeNow))
+	m := expectedMetric.Metrics().AppendEmpty()
+	m.SetName("testSummary")
+	m.SetDataType(pdata.MetricDataTypeSummary)
+	dp := m.Summary().DataPoints().AppendEmpty()
+	dp.SetSum(21)
+	dp.SetCount(6)
+	dp.SetTimestamp(pdata.TimestampFromTime(timeNow))
+	for i, key := range oneSummaryMetric.labelKeys {
+		dp.LabelsMap().Insert(key, oneSummaryMetric.labelValues[i])
+	}
 	quantile := []float64{0, 10, 50, 90, 95, 100}
 	value := []float64{1, 1, 3, 6, 6, 6}
 	for int, v := range quantile {
-		eachQuantile := pdata.NewValueAtQuantile()
+		eachQuantile := dp.QuantileValues().AppendEmpty()
 		eachQuantile.SetQuantile(v)
 		eachQuantileValue := value[int]
 		eachQuantile.SetValue(eachQuantileValue)
-		expectedMetric.Metrics().At(0).Summary().DataPoints().At(0).QuantileValues().Append(eachQuantile)
 	}
 
 	assert.Equal(t, metric, expectedMetric)

@@ -13,8 +13,10 @@ The following configuration options are required:
 
 Multiple policies exist today and it is straight forward to add more. These include:
 - `always_sample`: Sample all traces
+- `latency`: Sample based on the duration of the trace. The duration is determined by looking at the earliest start time and latest end time, without taking into consideration what happened in between.
 - `numeric_attribute`: Sample based on number attributes
-- `string_attribute`: Sample based on string attributes
+- `status_code`: Sample based upon the status code (`OK`, `ERROR` or `UNSET`)
+- `string_attribute`: Sample based on string attributes value matches, both exact and regex value matches are supported
 - `rate_limiting`: Sample based on rate
 
 The following configuration options can also be modified:
@@ -38,16 +40,31 @@ processors:
           },
           {
             name: test-policy-2,
+            type: latency,
+            latency: {threshold_ms: 5000}
+          },
+          {
+            name: test-policy-3,
             type: numeric_attribute,
             numeric_attribute: {key: key1, min_value: 50, max_value: 100}
           },
           {
-            name: test-policy-3,
+            name: test-policy-4,
+            type: status_code,
+            status_code: {status_codes: [ERROR, UNSET]}
+          },
+          {
+            name: test-policy-5,
             type: string_attribute,
             string_attribute: {key: key2, values: [value1, value2]}
           },
           {
-            name: test-policy-4,
+            name: test-policy-6,
+            type: string_attribute,
+            string_attribute: {key: key2, values: [value1, val*], enabled_regex_matching: true, cache_max_size: 10}
+          },
+          {
+            name: test-policy-7,
             type: rate_limiting,
             rate_limiting: {spans_per_second: 35}
          }

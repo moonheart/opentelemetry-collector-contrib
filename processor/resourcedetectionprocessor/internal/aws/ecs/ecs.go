@@ -23,13 +23,14 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
 )
 
 const (
+	// TypeStr is type of detector.
 	TypeStr     = "ecs"
 	tmde3EnvVar = "ECS_CONTAINER_METADATA_URI"
 	tmde4EnvVar = "ECS_CONTAINER_METADATA_URI_V4"
@@ -41,7 +42,7 @@ type Detector struct {
 	provider ecsMetadataProvider
 }
 
-func NewDetector(params component.ProcessorCreateParams, _ internal.DetectorConfig) (internal.Detector, error) {
+func NewDetector(params component.ProcessorCreateSettings, _ internal.DetectorConfig) (internal.Detector, error) {
 	return &Detector{provider: &ecsMetadataProviderImpl{logger: params.Logger, client: &http.Client{}}}, nil
 }
 

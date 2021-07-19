@@ -24,13 +24,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
 )
 
 const (
+	// TypeStr is type of detector.
 	TypeStr   = "ec2"
 	tagPrefix = "ec2.tag."
 )
@@ -42,7 +43,7 @@ type Detector struct {
 	tagKeyRegexes    []*regexp.Regexp
 }
 
-func NewDetector(_ component.ProcessorCreateParams, dcfg internal.DetectorConfig) (internal.Detector, error) {
+func NewDetector(_ component.ProcessorCreateSettings, dcfg internal.DetectorConfig) (internal.Detector, error) {
 	cfg := dcfg.(Config)
 	sess, err := session.NewSession()
 	if err != nil {

@@ -25,7 +25,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-log-collection/entry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 )
 
 func BenchmarkConvertSimple(b *testing.B) {
@@ -141,7 +141,7 @@ func TestConvert(t *testing.T) {
 	{
 		att, ok := rls.Resource().Attributes().Get("type")
 		if assert.True(t, ok) {
-			if assert.Equal(t, att.Type(), pdata.AttributeValueSTRING) {
+			if assert.Equal(t, att.Type(), pdata.AttributeValueTypeString) {
 				assert.Equal(t, att.StringVal(), "global")
 			}
 		}
@@ -167,7 +167,7 @@ func TestConvert(t *testing.T) {
 		assert.EqualValues(t, m.Sort(), atts.Sort())
 	}
 
-	if assert.Equal(t, pdata.AttributeValueMAP, lr.Body().Type()) {
+	if assert.Equal(t, pdata.AttributeValueTypeMap, lr.Body().Type()) {
 		m := pdata.NewAttributeMap()
 		m.InitFromMap(map[string]pdata.AttributeValue{
 			"bool":   pdata.NewAttributeValueBool(true),
@@ -401,14 +401,10 @@ func TestConverterCancelledContextCancellsTheFlush(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		pLogs := pdata.NewLogs()
-		logs := pLogs.ResourceLogs()
-		logs.Resize(1)
-		rls := logs.At(0)
-		rls.InstrumentationLibraryLogs().Resize(1)
-		ills := rls.InstrumentationLibraryLogs().At(0)
+		ills := pLogs.ResourceLogs().AppendEmpty().InstrumentationLibraryLogs().AppendEmpty()
 
 		lr := convert(complexEntry())
-		ills.Logs().Append(lr)
+		lr.CopyTo(ills.Logs().AppendEmpty())
 
 		assert.Error(t, converter.flush(ctx, pLogs))
 	}()
@@ -434,7 +430,7 @@ func TestConvertMetadata(t *testing.T) {
 	require.Equal(t, "two", attVal.StringVal(), "expected label to have value 'two'")
 
 	bod := result.Body()
-	require.Equal(t, pdata.AttributeValueBOOL, bod.Type())
+	require.Equal(t, pdata.AttributeValueTypeBool, bod.Type())
 	require.True(t, bod.BoolVal())
 }
 

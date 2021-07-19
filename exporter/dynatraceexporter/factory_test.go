@@ -21,14 +21,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/configcheck"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configtest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	"go.uber.org/zap"
 
 	dtconfig "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/dynatraceexporter/config"
 )
@@ -59,7 +57,7 @@ func TestLoadConfig(t *testing.T) {
 
 	factory := NewFactory()
 	factories.Exporters[typeStr] = factory
-	cfg, err := configtest.LoadConfigFile(t, path.Join(".", "testdata", "config.yml"), factories)
+	cfg, err := configtest.LoadConfigAndValidate(path.Join(".", "testdata", "config.yml"), factories)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -93,14 +91,12 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestCreateAPIMetricsExporter(t *testing.T) {
-	logger := zap.NewNop()
-
 	factories, err := componenttest.NopFactories()
 	require.NoError(t, err)
 
 	factory := NewFactory()
 	factories.Exporters[typeStr] = factory
-	cfg, err := configtest.LoadConfigFile(t, path.Join(".", "testdata", "config.yml"), factories)
+	cfg, err := configtest.LoadConfigAndValidate(path.Join(".", "testdata", "config.yml"), factories)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -108,7 +104,7 @@ func TestCreateAPIMetricsExporter(t *testing.T) {
 	ctx := context.Background()
 	exp, err := factory.CreateMetricsExporter(
 		ctx,
-		component.ExporterCreateParams{Logger: logger},
+		componenttest.NewNopExporterCreateSettings(),
 		cfg.Exporters[config.NewIDWithName(typeStr, "valid")],
 	)
 
@@ -117,14 +113,12 @@ func TestCreateAPIMetricsExporter(t *testing.T) {
 }
 
 func TestCreateAPIMetricsExporterInvalid(t *testing.T) {
-	logger := zap.NewNop()
-
 	factories, err := componenttest.NopFactories()
 	require.NoError(t, err)
 
 	factory := NewFactory()
 	factories.Exporters[typeStr] = factory
-	cfg, err := configtest.LoadConfigFile(t, path.Join(".", "testdata", "config.yml"), factories)
+	cfg, err := configtest.LoadConfigAndValidate(path.Join(".", "testdata", "config.yml"), factories)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -132,7 +126,7 @@ func TestCreateAPIMetricsExporterInvalid(t *testing.T) {
 	ctx := context.Background()
 	exp, err := factory.CreateMetricsExporter(
 		ctx,
-		component.ExporterCreateParams{Logger: logger},
+		componenttest.NewNopExporterCreateSettings(),
 		cfg.Exporters[config.NewIDWithName(typeStr, "invalid")],
 	)
 

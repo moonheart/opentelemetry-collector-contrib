@@ -17,16 +17,19 @@ package datadogexporter
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/model/pdata"
+	"go.uber.org/zap"
 	"gopkg.in/zorkian/go-datadog-api.v2"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/attributes"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/config"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/metadata"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/metrics"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/attributes"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metrics"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/ttlmap"
 )
 
@@ -50,9 +53,9 @@ func isCumulativeMonotonic(md pdata.Metric) bool {
 	case pdata.MetricDataTypeIntSum:
 		return md.IntSum().AggregationTemporality() == pdata.AggregationTemporalityCumulative &&
 			md.IntSum().IsMonotonic()
-	case pdata.MetricDataTypeDoubleSum:
-		return md.DoubleSum().AggregationTemporality() == pdata.AggregationTemporalityCumulative &&
-			md.DoubleSum().IsMonotonic()
+	case pdata.MetricDataTypeSum:
+		return md.Sum().AggregationTemporality() == pdata.AggregationTemporalityCumulative &&
+			md.Sum().IsMonotonic()
 	}
 	return false
 }
@@ -249,10 +252,57 @@ func mapHistogramMetrics(name string, slice pdata.HistogramDataPointSlice, bucke
 	return ms
 }
 
+// getQuantileTag returns the quantile tag for summary types.
+// Since the summary type is provided as a compatibility feature, we try to format the float number as close as possible to what
+// we do on the Datadog Agent Python OpenMetrics check, which, in turn, tries to
+// follow https://github.com/OpenObservability/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#considerations-canonical-numbers
+func getQuantileTag(quantile float64) string {
+	// We handle 0 and 1 separately since they are special
+	if quantile == 0 {
+		// we do this differently on our check
+		return "quantile:0"
+	} else if quantile == 1.0 {
+		// it needs to have a '.0' added at the end according to the spec
+		return "quantile:1.0"
+	}
+	return fmt.Sprintf("quantile:%s", strconv.FormatFloat(quantile, 'g', -1, 64))
+}
+
+// mapSummaryMetrics maps summary datapoints into Datadog metrics
+func mapSummaryMetrics(name string, slice pdata.SummaryDataPointSlice, quantiles bool, attrTags []string) []datadog.Metric {
+	// Allocate assuming none are nil and no quantiles
+	ms := make([]datadog.Metric, 0, 2*slice.Len())
+	for i := 0; i < slice.Len(); i++ {
+		p := slice.At(i)
+		ts := uint64(p.Timestamp())
+		tags := getTags(p.LabelsMap())
+		tags = append(tags, attrTags...)
+
+		ms = append(ms,
+			metrics.NewGauge(fmt.Sprintf("%s.count", name), ts, float64(p.Count()), tags),
+			metrics.NewGauge(fmt.Sprintf("%s.sum", name), ts, p.Sum(), tags),
+		)
+
+		if quantiles {
+			fullName := fmt.Sprintf("%s.quantile", name)
+			quantiles := p.QuantileValues()
+			for i := 0; i < quantiles.Len(); i++ {
+				q := quantiles.At(i)
+				quantileTags := append(tags, getQuantileTag(q.Quantile()))
+				ms = append(ms,
+					metrics.NewGauge(fullName, ts, q.Value(), quantileTags),
+				)
+			}
+		}
+	}
+	return ms
+}
+
 // mapMetrics maps OTLP metrics into the DataDog format
-func mapMetrics(cfg config.MetricsConfig, prevPts *ttlmap.TTLMap, fallbackHost string, md pdata.Metrics) (series []datadog.Metric, droppedTimeSeries int) {
+func mapMetrics(logger *zap.Logger, cfg config.MetricsConfig, prevPts *ttlmap.TTLMap, fallbackHost string, md pdata.Metrics, buildInfo component.BuildInfo) (series []datadog.Metric, droppedTimeSeries int) {
 	pushTime := uint64(time.Now().UTC().UnixNano())
 	rms := md.ResourceMetrics()
+	seenHosts := make(map[string]struct{})
 	for i := 0; i < rms.Len(); i++ {
 		rm := rms.At(i)
 
@@ -268,11 +318,7 @@ func mapMetrics(cfg config.MetricsConfig, prevPts *ttlmap.TTLMap, fallbackHost s
 		if !ok {
 			host = fallbackHost
 		}
-
-		// Report the host as running
-		runningMetric := metrics.DefaultMetrics("metrics", host, pushTime)
-
-		series = append(series, runningMetric...)
+		seenHosts[host] = struct{}{}
 
 		ilms := rm.InstrumentationLibraryMetrics()
 		for j := 0; j < ilms.Len(); j++ {
@@ -282,28 +328,31 @@ func mapMetrics(cfg config.MetricsConfig, prevPts *ttlmap.TTLMap, fallbackHost s
 				md := metricsArray.At(k)
 				var datapoints []datadog.Metric
 				switch md.DataType() {
-				case pdata.MetricDataTypeNone:
-					continue
 				case pdata.MetricDataTypeIntGauge:
 					datapoints = mapIntMetrics(md.Name(), md.IntGauge().DataPoints(), attributeTags)
-				case pdata.MetricDataTypeDoubleGauge:
-					datapoints = mapDoubleMetrics(md.Name(), md.DoubleGauge().DataPoints(), attributeTags)
+				case pdata.MetricDataTypeGauge:
+					datapoints = mapDoubleMetrics(md.Name(), md.Gauge().DataPoints(), attributeTags)
 				case pdata.MetricDataTypeIntSum:
 					if cfg.SendMonotonic && isCumulativeMonotonic(md) {
 						datapoints = mapIntMonotonicMetrics(md.Name(), prevPts, md.IntSum().DataPoints(), attributeTags)
 					} else {
 						datapoints = mapIntMetrics(md.Name(), md.IntSum().DataPoints(), attributeTags)
 					}
-				case pdata.MetricDataTypeDoubleSum:
+				case pdata.MetricDataTypeSum:
 					if cfg.SendMonotonic && isCumulativeMonotonic(md) {
-						datapoints = mapDoubleMonotonicMetrics(md.Name(), prevPts, md.DoubleSum().DataPoints(), attributeTags)
+						datapoints = mapDoubleMonotonicMetrics(md.Name(), prevPts, md.Sum().DataPoints(), attributeTags)
 					} else {
-						datapoints = mapDoubleMetrics(md.Name(), md.DoubleSum().DataPoints(), attributeTags)
+						datapoints = mapDoubleMetrics(md.Name(), md.Sum().DataPoints(), attributeTags)
 					}
 				case pdata.MetricDataTypeIntHistogram:
 					datapoints = mapIntHistogramMetrics(md.Name(), md.IntHistogram().DataPoints(), cfg.Buckets, attributeTags)
 				case pdata.MetricDataTypeHistogram:
 					datapoints = mapHistogramMetrics(md.Name(), md.Histogram().DataPoints(), cfg.Buckets, attributeTags)
+				case pdata.MetricDataTypeSummary:
+					datapoints = mapSummaryMetrics(md.Name(), md.Summary().DataPoints(), cfg.Quantiles, attributeTags)
+				default: // pdata.MetricDataTypeNone or any other not supported type
+					logger.Debug("Unknown or unsupported metric type", zap.String("metric name", md.Name()), zap.Any("data type", md.DataType()))
+					continue
 				}
 
 				for i := range datapoints {
@@ -314,5 +363,12 @@ func mapMetrics(cfg config.MetricsConfig, prevPts *ttlmap.TTLMap, fallbackHost s
 			}
 		}
 	}
+
+	for host := range seenHosts {
+		// Report the host as running
+		runningMetric := metrics.DefaultMetrics("metrics", host, pushTime, buildInfo)
+		series = append(series, runningMetric...)
+	}
+
 	return
 }

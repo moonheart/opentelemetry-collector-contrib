@@ -31,7 +31,7 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 	"go.uber.org/zap"
 
@@ -47,6 +47,10 @@ var (
 		conventions.AttributeContainerName: "container_name",
 		conventions.AttributeK8sCluster:    "k8s_cluster_name",
 		"severity":                         "severity",
+	}
+	testValidResourceWithMapping = map[string]string{
+		"resource.name": "resource_name",
+		"severity":      "severity",
 	}
 )
 
@@ -75,25 +79,12 @@ func TestExporter_new(t *testing.T) {
 				Endpoint: validEndpoint,
 			},
 			Labels: LabelsConfig{
-				Attributes: testValidAttributesWithMapping,
+				Attributes:         testValidAttributesWithMapping,
+				ResourceAttributes: testValidResourceWithMapping,
 			},
 		}
-		exp, err := newExporter(config, zap.NewNop())
-		require.NoError(t, err)
+		exp := newExporter(config, zap.NewNop())
 		require.NotNil(t, exp)
-	})
-
-	t.Run("with invalid HTTPClientSettings", func(t *testing.T) {
-		config := &Config{
-			HTTPClientSettings: confighttp.HTTPClientSettings{
-				Endpoint: "",
-				CustomRoundTripper: func(next http.RoundTripper) (http.RoundTripper, error) {
-					return nil, fmt.Errorf("this causes HTTPClientSettings.ToClient() to error")
-				},
-			},
-		}
-		_, err := newExporter(config, zap.NewNop())
-		require.Error(t, err)
 	})
 }
 
@@ -119,6 +110,7 @@ func TestExporter_pushLogData(t *testing.T) {
 			pdata.NewAttributeMap().InitFromMap(map[string]pdata.AttributeValue{
 				conventions.AttributeContainerName: pdata.NewAttributeValueString("api"),
 				conventions.AttributeK8sCluster:    pdata.NewAttributeValueString("local"),
+				"resource.name":                    pdata.NewAttributeValueString("myresource"),
 				"severity":                         pdata.NewAttributeValueString("debug"),
 			}))
 	}
@@ -136,6 +128,9 @@ func TestExporter_pushLogData(t *testing.T) {
 				conventions.AttributeContainerName: "container_name",
 				conventions.AttributeK8sCluster:    "k8s_cluster_name",
 				"severity":                         "severity",
+			},
+			ResourceAttributes: map[string]string{
+				"resource.name": "resource_name",
 			},
 		},
 	}
@@ -243,10 +238,9 @@ func TestExporter_pushLogData(t *testing.T) {
 				tt.config.Endpoint = serverURL.String()
 			}
 
-			exp, err := newExporter(tt.config, zap.NewNop())
-			require.NoError(t, err)
+			exp := newExporter(tt.config, zap.NewNop())
 			require.NotNil(t, exp)
-			err = exp.start(context.Background(), componenttest.NewNopHost())
+			err := exp.start(context.Background(), componenttest.NewNopHost())
 			require.NoError(t, err)
 
 			err = exp.pushLogData(context.Background(), tt.genLogsFunc())
@@ -272,12 +266,14 @@ func TestExporter_logDataToLoki(t *testing.T) {
 				conventions.AttributeK8sCluster:    "k8s_cluster_name",
 				"severity":                         "severity",
 			},
+			ResourceAttributes: map[string]string{
+				"resource.name": "resource_name",
+			},
 		},
 	}
-	exp, err := newExporter(config, zap.NewNop())
-	require.NoError(t, err)
+	exp := newExporter(config, zap.NewNop())
 	require.NotNil(t, exp)
-	err = exp.start(context.Background(), componenttest.NewNopHost())
+	err := exp.start(context.Background(), componenttest.NewNopHost())
 	require.NoError(t, err)
 
 	t.Run("with attributes that match config", func(t *testing.T) {
@@ -361,6 +357,43 @@ func TestExporter_logDataToLoki(t *testing.T) {
 		require.Len(t, pr.Streams[0].Entries, 1)
 		require.Len(t, pr.Streams[1].Entries, 1)
 	})
+
+	t.Run("with attributes and resource attributes that match config", func(t *testing.T) {
+		logs := pdata.NewLogs()
+		ts := pdata.Timestamp(int64(1) * time.Millisecond.Nanoseconds())
+		lr := logs.ResourceLogs().AppendEmpty()
+		lr.Resource().Attributes().InsertString("not.in.config", "not allowed")
+
+		lri := lr.InstrumentationLibraryLogs().AppendEmpty().Logs().AppendEmpty()
+		lri.Body().SetStringVal("log message")
+		lri.Attributes().InsertString("not.in.config", "not allowed")
+		lri.SetTimestamp(ts)
+
+		pr, numDroppedLogs := exp.logDataToLoki(logs)
+		expectedPr := &logproto.PushRequest{Streams: make([]logproto.Stream, 0)}
+		require.Equal(t, 1, numDroppedLogs)
+		require.Equal(t, expectedPr, pr)
+	})
+
+	t.Run("with attributes and resource attributes", func(t *testing.T) {
+		logs := pdata.NewLogs()
+		ts := pdata.Timestamp(int64(1) * time.Millisecond.Nanoseconds())
+		lr := logs.ResourceLogs().AppendEmpty()
+		lr.Resource().Attributes().InsertString("resource.name", "myresource")
+
+		lri := lr.InstrumentationLibraryLogs().AppendEmpty().Logs().AppendEmpty()
+		lri.Body().SetStringVal("log message")
+		lri.Attributes().InsertString(conventions.AttributeContainerName, "mycontainer")
+		lri.Attributes().InsertString("severity", "info")
+		lri.Attributes().InsertString("random.attribute", "random")
+		lri.SetTimestamp(ts)
+
+		pr, numDroppedLogs := exp.logDataToLoki(logs)
+		require.Equal(t, 0, numDroppedLogs)
+		require.NotNil(t, pr)
+		require.Len(t, pr.Streams, 1)
+	})
+
 }
 
 func TestExporter_convertAttributesToLabels(t *testing.T) {
@@ -374,12 +407,15 @@ func TestExporter_convertAttributesToLabels(t *testing.T) {
 				conventions.AttributeK8sCluster:    "k8s_cluster_name",
 				"severity":                         "severity",
 			},
+			ResourceAttributes: map[string]string{
+				"resource.name": "resource_name",
+				"severity":      "severity",
+			},
 		},
 	}
-	exp, err := newExporter(config, zap.NewNop())
-	require.NoError(t, err)
+	exp := newExporter(config, zap.NewNop())
 	require.NotNil(t, exp)
-	err = exp.start(context.Background(), componenttest.NewNopHost())
+	err := exp.start(context.Background(), componenttest.NewNopHost())
 	require.NoError(t, err)
 
 	t.Run("with attributes that match", func(t *testing.T) {
@@ -387,50 +423,50 @@ func TestExporter_convertAttributesToLabels(t *testing.T) {
 		am.InsertString(conventions.AttributeContainerName, "mycontainer")
 		am.InsertString(conventions.AttributeK8sCluster, "mycluster")
 		am.InsertString("severity", "debug")
+		ram := pdata.NewAttributeMap()
+		ram.InsertString("resource.name", "myresource")
+		// this should overwrite log attribute of the same name
+		ram.InsertString("severity", "info")
 
-		ls, ok := exp.convertAttributesToLabels(am)
+		ls, _ := exp.convertAttributesAndMerge(am, ram)
 		expLs := model.LabelSet{
 			model.LabelName("container_name"):   model.LabelValue("mycontainer"),
 			model.LabelName("k8s_cluster_name"): model.LabelValue("mycluster"),
-			model.LabelName("severity"):         model.LabelValue("debug"),
+			model.LabelName("severity"):         model.LabelValue("info"),
+			model.LabelName("resource_name"):    model.LabelValue("myresource"),
 		}
-		require.True(t, ok)
 		require.Equal(t, expLs, ls)
 	})
 
 	t.Run("with attribute matches and the value is a boolean", func(t *testing.T) {
 		am := pdata.NewAttributeMap()
 		am.InsertBool("severity", false)
-
-		ls, ok := exp.convertAttributesToLabels(am)
-		require.False(t, ok)
+		ram := pdata.NewAttributeMap()
+		ls, _ := exp.convertAttributesAndMerge(am, ram)
 		require.Nil(t, ls)
 	})
 
 	t.Run("with attribute that matches and the value is a double", func(t *testing.T) {
 		am := pdata.NewAttributeMap()
 		am.InsertDouble("severity", float64(0))
-
-		ls, ok := exp.convertAttributesToLabels(am)
-		require.False(t, ok)
+		ram := pdata.NewAttributeMap()
+		ls, _ := exp.convertAttributesAndMerge(am, ram)
 		require.Nil(t, ls)
 	})
 
 	t.Run("with attribute that matches and the value is an int", func(t *testing.T) {
 		am := pdata.NewAttributeMap()
 		am.InsertInt("severity", 0)
-
-		ls, ok := exp.convertAttributesToLabels(am)
-		require.False(t, ok)
+		ram := pdata.NewAttributeMap()
+		ls, _ := exp.convertAttributesAndMerge(am, ram)
 		require.Nil(t, ls)
 	})
 
 	t.Run("with attribute that matches and the value is null", func(t *testing.T) {
 		am := pdata.NewAttributeMap()
 		am.InsertNull("severity")
-
-		ls, ok := exp.convertAttributesToLabels(am)
-		require.False(t, ok)
+		ram := pdata.NewAttributeMap()
+		ls, _ := exp.convertAttributesAndMerge(am, ram)
 		require.Nil(t, ls)
 	})
 }
@@ -496,18 +532,33 @@ func TestExporter_encode(t *testing.T) {
 	})
 }
 
-func TestExporter_startAlwaysReturnsNil(t *testing.T) {
+func TestExporter_startReturnsNillWhenValidConfig(t *testing.T) {
 	config := &Config{
 		HTTPClientSettings: confighttp.HTTPClientSettings{
 			Endpoint: validEndpoint,
 		},
 		Labels: LabelsConfig{
-			Attributes: testValidAttributesWithMapping,
+			Attributes:         testValidAttributesWithMapping,
+			ResourceAttributes: testValidResourceWithMapping,
 		},
 	}
-	e, err := newExporter(config, zap.NewNop())
-	require.NoError(t, err)
-	require.NoError(t, e.start(context.Background(), componenttest.NewNopHost()))
+	exp := newExporter(config, zap.NewNop())
+	require.NotNil(t, exp)
+	require.NoError(t, exp.start(context.Background(), componenttest.NewNopHost()))
+}
+
+func TestExporter_startReturnsErrorWhenInvalidHttpClientSettings(t *testing.T) {
+	config := &Config{
+		HTTPClientSettings: confighttp.HTTPClientSettings{
+			Endpoint: "",
+			CustomRoundTripper: func(next http.RoundTripper) (http.RoundTripper, error) {
+				return nil, fmt.Errorf("this causes HTTPClientSettings.ToClient() to error")
+			},
+		},
+	}
+	exp := newExporter(config, zap.NewNop())
+	require.NotNil(t, exp)
+	require.Error(t, exp.start(context.Background(), componenttest.NewNopHost()))
 }
 
 func TestExporter_stopAlwaysReturnsNil(t *testing.T) {
@@ -516,10 +567,11 @@ func TestExporter_stopAlwaysReturnsNil(t *testing.T) {
 			Endpoint: validEndpoint,
 		},
 		Labels: LabelsConfig{
-			Attributes: testValidAttributesWithMapping,
+			Attributes:         testValidAttributesWithMapping,
+			ResourceAttributes: testValidResourceWithMapping,
 		},
 	}
-	e, err := newExporter(config, zap.NewNop())
-	require.NoError(t, err)
-	require.NoError(t, e.stop(context.Background()))
+	exp := newExporter(config, zap.NewNop())
+	require.NotNil(t, exp)
+	require.NoError(t, exp.stop(context.Background()))
 }

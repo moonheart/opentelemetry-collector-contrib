@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 )
 
@@ -169,7 +169,7 @@ func (s *sender) send(ctx context.Context, pipeline PipelineType, body io.Reader
 
 // logToText converts LogRecord to a plain text line, returns it and error eventually
 func (s *sender) logToText(record pdata.LogRecord) string {
-	return tracetranslator.AttributeValueToString(record.Body(), false)
+	return tracetranslator.AttributeValueToString(record.Body())
 }
 
 // logToJSON converts LogRecord to a json line, returns it and error eventually

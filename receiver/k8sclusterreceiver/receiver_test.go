@@ -23,13 +23,14 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
+	"go.opentelemetry.io/collector/obsreport"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver/testutils"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver/internal/testutils"
 )
 
 func TestReceiver(t *testing.T) {
@@ -50,10 +51,10 @@ func TestReceiver(t *testing.T) {
 	// Expects metric data from nodes and pods where each metric data
 	// struct corresponds to one resource.
 	expectedNumMetrics := numPods + numNodes
-	var initialMetricsCount int
+	var initialDataPointCount int
 	require.Eventually(t, func() bool {
-		initialMetricsCount = sink.MetricsCount()
-		return initialMetricsCount == expectedNumMetrics
+		initialDataPointCount = sink.DataPointCount()
+		return initialDataPointCount == expectedNumMetrics
 	}, 10*time.Second, 100*time.Millisecond,
 		"metrics not collected")
 
@@ -64,7 +65,7 @@ func TestReceiver(t *testing.T) {
 	expectedNumMetrics = (numPods - numPodsToDelete) + numNodes
 	var metricsCountDelta int
 	require.Eventually(t, func() bool {
-		metricsCountDelta = sink.MetricsCount() - initialMetricsCount
+		metricsCountDelta = sink.DataPointCount() - initialDataPointCount
 		return metricsCountDelta == expectedNumMetrics
 	}, 10*time.Second, 100*time.Millisecond,
 		"updated metrics not collected")
@@ -101,7 +102,7 @@ func TestReceiverWithManyResources(t *testing.T) {
 	require.NoError(t, r.Start(ctx, componenttest.NewNopHost()))
 
 	require.Eventually(t, func() bool {
-		return sink.MetricsCount() == numPods
+		return sink.DataPointCount() == numPods
 	}, 10*time.Second, 100*time.Millisecond,
 		"metrics not collected")
 
@@ -182,5 +183,6 @@ func setupReceiver(
 		logger:          logger,
 		config:          config,
 		consumer:        consumer,
+		obsrecv:         obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: config.ID(), Transport: "http"}),
 	}
 }

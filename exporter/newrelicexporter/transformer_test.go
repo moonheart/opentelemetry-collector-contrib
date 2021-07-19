@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/internaldata"
 	"go.uber.org/zap"
 )
@@ -53,7 +53,7 @@ func TestCommonAttributes(t *testing.T) {
 	assert.Equal(t, "test version", commonAttrs[instrumentationVersionKey])
 
 	assert.Equal(t, 1, len(details.attributeMetadataCount))
-	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationResource, attributeType: pdata.AttributeValueSTRING}])
+	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationResource, attributeType: pdata.AttributeValueTypeString}])
 }
 
 func TestDoesNotCaptureResourceAttributeMetadata(t *testing.T) {
@@ -168,8 +168,8 @@ func TestCaptureSpanAttributeMetadata(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(details.attributeMetadataCount))
-	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationSpan, attributeType: pdata.AttributeValueINT}])
-	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationSpanEvent, attributeType: pdata.AttributeValueBOOL}])
+	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationSpan, attributeType: pdata.AttributeValueTypeInt}])
+	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationSpanEvent, attributeType: pdata.AttributeValueTypeBool}])
 }
 
 func TestDoesNotCaptureSpanAttributeMetadata(t *testing.T) {
@@ -401,7 +401,7 @@ func TestTransformSpan(t *testing.T) {
 				s.SetTraceID(pdata.NewTraceID([...]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
 				s.SetSpanID(pdata.NewSpanID([...]byte{0, 0, 0, 0, 0, 0, 0, 6}))
 				s.SetName("span kind server")
-				s.SetKind(pdata.SpanKindSERVER)
+				s.SetKind(pdata.SpanKindServer)
 				return s
 			},
 			want: telemetry.Span{
@@ -494,12 +494,13 @@ func TestTransformSpan(t *testing.T) {
 				s.SetName("with dropped attributes on events")
 
 				ev := pdata.NewSpanEventSlice()
-				ev.Resize(1)
-				event := ev.At(0)
+				ev.EnsureCapacity(1)
+				event := ev.AppendEmpty()
 				event.SetName("this is the event name")
 				event.SetTimestamp(pdata.TimestampFromTime(now))
 				event.SetDroppedAttributesCount(1)
-				s.Events().Append(event)
+				tgt := s.Events().AppendEmpty()
+				event.CopyTo(tgt)
 				return s
 			},
 			want: telemetry.Span{
@@ -592,8 +593,8 @@ func TestTransformGauge(t *testing.T) {
 		m.SetName("gauge")
 		m.SetDescription("description")
 		m.SetUnit("1")
-		m.SetDataType(pdata.MetricDataTypeDoubleGauge)
-		gd := m.DoubleGauge()
+		m.SetDataType(pdata.MetricDataTypeGauge)
+		gd := m.Gauge()
 		dp := gd.DataPoints().AppendEmpty()
 		dp.SetTimestamp(ts)
 		dp.SetValue(42.0)
@@ -633,7 +634,7 @@ func TestTransformSum(t *testing.T) {
 		telemetry.Gauge{
 			Name:      "sum",
 			Value:     42.0,
-			Timestamp: start.AsTime(),
+			Timestamp: end.AsTime(),
 			Attributes: map[string]interface{}{
 				"unit":        "1",
 				"description": "description",
@@ -646,28 +647,28 @@ func TestTransformSum(t *testing.T) {
 		m.SetName("sum")
 		m.SetDescription("description")
 		m.SetUnit("1")
-		m.SetDataType(pdata.MetricDataTypeDoubleSum)
-		d := m.DoubleSum()
+		m.SetDataType(pdata.MetricDataTypeSum)
+		d := m.Sum()
 		d.SetAggregationTemporality(pdata.AggregationTemporalityDelta)
 		dp := d.DataPoints().AppendEmpty()
 		dp.SetStartTimestamp(start)
 		dp.SetTimestamp(end)
 		dp.SetValue(42.0)
-		t.Run("DoubleSum-Delta", func(t *testing.T) { testTransformMetric(t, m, expected) })
+		t.Run("Sum-Delta", func(t *testing.T) { testTransformMetric(t, m, expected) })
 	}
 	{
 		m := pdata.NewMetric()
 		m.SetName("sum")
 		m.SetDescription("description")
 		m.SetUnit("1")
-		m.SetDataType(pdata.MetricDataTypeDoubleSum)
-		d := m.DoubleSum()
+		m.SetDataType(pdata.MetricDataTypeSum)
+		d := m.Sum()
 		d.SetAggregationTemporality(pdata.AggregationTemporalityCumulative)
 		dp := d.DataPoints().AppendEmpty()
 		dp.SetStartTimestamp(start)
 		dp.SetTimestamp(end)
 		dp.SetValue(42.0)
-		t.Run("DoubleSum-Cumulative", func(t *testing.T) { testTransformMetric(t, m, expectedGauge) })
+		t.Run("Sum-Cumulative", func(t *testing.T) { testTransformMetric(t, m, expectedGauge) })
 	}
 	{
 		m := pdata.NewMetric()
@@ -962,7 +963,7 @@ func TestCaptureLogAttributeMetadata(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, len(details.attributeMetadataCount))
-	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationLog, attributeType: pdata.AttributeValueSTRING}])
+	assert.Equal(t, 1, details.attributeMetadataCount[attributeStatsKey{location: attributeLocationLog, attributeType: pdata.AttributeValueTypeString}])
 }
 
 func TestDoesNotCaptureLogAttributeMetadata(t *testing.T) {

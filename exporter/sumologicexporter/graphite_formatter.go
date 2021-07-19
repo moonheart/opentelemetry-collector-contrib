@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 )
 
@@ -66,7 +66,7 @@ func (gf *graphiteFormatter) format(f fields, metricName string) string {
 			attr, ok := f.orig.Get(matchset)
 			var value string
 			if ok {
-				value = tracetranslator.AttributeValueToString(attr, false)
+				value = tracetranslator.AttributeValueToString(attr)
 			} else {
 				value = ""
 			}
@@ -116,14 +116,14 @@ func (gf *graphiteFormatter) metric2String(record metricPair) string {
 		for i := 0; i < dps.Len(); i++ {
 			nextLines = append(nextLines, gf.intRecord(fs, name, dps.At(i)))
 		}
-	case pdata.MetricDataTypeDoubleGauge:
-		dps := record.metric.DoubleGauge().DataPoints()
+	case pdata.MetricDataTypeGauge:
+		dps := record.metric.Gauge().DataPoints()
 		nextLines = make([]string, 0, dps.Len())
 		for i := 0; i < dps.Len(); i++ {
 			nextLines = append(nextLines, gf.doubleRecord(fs, name, dps.At(i)))
 		}
-	case pdata.MetricDataTypeDoubleSum:
-		dps := record.metric.DoubleSum().DataPoints()
+	case pdata.MetricDataTypeSum:
+		dps := record.metric.Sum().DataPoints()
 		nextLines = make([]string, 0, dps.Len())
 		for i := 0; i < dps.Len(); i++ {
 			nextLines = append(nextLines, gf.doubleRecord(fs, name, dps.At(i)))

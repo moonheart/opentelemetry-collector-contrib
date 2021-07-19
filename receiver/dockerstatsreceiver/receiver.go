@@ -39,11 +39,11 @@ type Receiver struct {
 	nextConsumer      consumer.Metrics
 	client            *dockerClient
 	runner            *interval.Runner
-	obsCtx            context.Context
 	runnerCtx         context.Context
 	runnerCancel      context.CancelFunc
 	successfullySetup bool
 	transport         string
+	obsrecv           *obsreport.Receiver
 }
 
 func NewReceiver(
@@ -67,6 +67,7 @@ func NewReceiver(
 		nextConsumer: nextConsumer,
 		logger:       logger,
 		transport:    parsed.Scheme,
+		obsrecv:      obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: config.ID(), Transport: parsed.Scheme}),
 	}
 
 	return &receiver, nil
@@ -78,8 +79,6 @@ func (r *Receiver) Start(ctx context.Context, host component.Host) error {
 	if err != nil {
 		return err
 	}
-
-	r.obsCtx = obsreport.ReceiverContext(ctx, r.config.ID(), r.transport)
 
 	r.runnerCtx, r.runnerCancel = context.WithCancel(context.Background())
 	r.runner = interval.NewRunner(r.config.CollectionInterval, r)
@@ -120,7 +119,7 @@ func (r *Receiver) Run() error {
 		return r.Setup()
 	}
 
-	c := obsreport.StartMetricsReceiveOp(r.obsCtx, r.config.ID(), r.transport)
+	ctx := r.obsrecv.StartMetricsOp(r.runnerCtx)
 
 	containers := r.client.Containers()
 	results := make(chan result, len(containers))
@@ -129,7 +128,7 @@ func (r *Receiver) Run() error {
 	wg.Add(len(containers))
 	for _, container := range containers {
 		go func(dc DockerContainer) {
-			md, err := r.client.FetchContainerStatsAndConvertToMetrics(r.runnerCtx, dc)
+			md, err := r.client.FetchContainerStatsAndConvertToMetrics(ctx, dc)
 			results <- result{md, err}
 			wg.Done()
 		}(container)
@@ -144,9 +143,8 @@ func (r *Receiver) Run() error {
 		var err error
 		if result.md != nil {
 			md := internaldata.OCToMetrics(result.md.Node, result.md.Resource, result.md.Metrics)
-			_, np := md.MetricAndDataPointCount()
-			numPoints += np
-			err = r.nextConsumer.ConsumeMetrics(r.runnerCtx, md)
+			numPoints += md.DataPointCount()
+			err = r.nextConsumer.ConsumeMetrics(ctx, md)
 		} else {
 			err = result.err
 		}
@@ -156,6 +154,6 @@ func (r *Receiver) Run() error {
 		}
 	}
 
-	obsreport.EndMetricsReceiveOp(c, typeStr, numPoints, lastErr)
+	r.obsrecv.EndMetricsOp(ctx, typeStr, numPoints, lastErr)
 	return nil
 }

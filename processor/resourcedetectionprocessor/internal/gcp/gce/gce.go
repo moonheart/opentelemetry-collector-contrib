@@ -21,16 +21,15 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/gcp"
 )
 
-const (
-	TypeStr = "gce"
-)
+// TypeStr is type of detector.
+const TypeStr = "gce"
 
 var _ internal.Detector = (*Detector)(nil)
 
@@ -38,7 +37,7 @@ type Detector struct {
 	metadata gcp.Metadata
 }
 
-func NewDetector(component.ProcessorCreateParams, internal.DetectorConfig) (internal.Detector, error) {
+func NewDetector(component.ProcessorCreateSettings, internal.DetectorConfig) (internal.Detector, error) {
 	return &Detector{metadata: &gcp.MetadataImpl{}}, nil
 }
 

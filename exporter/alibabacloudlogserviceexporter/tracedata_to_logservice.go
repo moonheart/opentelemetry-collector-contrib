@@ -21,7 +21,7 @@ import (
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 	"github.com/gogo/protobuf/proto"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 )
 
@@ -159,15 +159,15 @@ func spanToLogServiceData(span pdata.Span, resourceContents, instrumentationLibr
 
 func spanKindToShortString(kind pdata.SpanKind) string {
 	switch kind {
-	case pdata.SpanKindINTERNAL:
+	case pdata.SpanKindInternal:
 		return string(tracetranslator.OpenTracingSpanKindInternal)
-	case pdata.SpanKindCLIENT:
+	case pdata.SpanKindClient:
 		return string(tracetranslator.OpenTracingSpanKindClient)
-	case pdata.SpanKindSERVER:
+	case pdata.SpanKindServer:
 		return string(tracetranslator.OpenTracingSpanKindServer)
-	case pdata.SpanKindPRODUCER:
+	case pdata.SpanKindProducer:
 		return string(tracetranslator.OpenTracingSpanKindProducer)
-	case pdata.SpanKindCONSUMER:
+	case pdata.SpanKindConsumer:
 		return string(tracetranslator.OpenTracingSpanKindConsumer)
 	default:
 		return string(tracetranslator.OpenTracingSpanKindUnspecified)

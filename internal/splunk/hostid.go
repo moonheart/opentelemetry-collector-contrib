@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 )
 
@@ -26,13 +26,13 @@ import (
 type HostIDKey string
 
 const (
-	// AWS
+	// HostIDKeyAWS AWS HostIDKey.
 	HostIDKeyAWS HostIDKey = "AWSUniqueId"
-	// GCP
+	// HostIDKeyGCP GCP HostIDKey.
 	HostIDKeyGCP HostIDKey = "gcp_id"
-	// Azure
+	// HostIDKeyAzure Azure HostIDKey.
 	HostIDKeyAzure HostIDKey = "azure_resource_id"
-	// Host
+	// HostIDKeyHost Host HostIDKey.
 	HostIDKeyHost HostIDKey = conventions.AttributeHostName
 )
 

@@ -17,21 +17,41 @@
 package cadvisor
 
 import (
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver/internal/host"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver/internal/cadvisor/extractors"
 )
 
 // cadvisor doesn't support windows, define the dummy functions
+
+type hostInfo interface {
+	GetNumCores() int64
+	GetMemoryCapacity() int64
+	GetClusterName() string
+}
 
 // Cadvisor is a dummy struct for windows
 type Cadvisor struct {
 }
 
+type Decorator interface {
+	Decorate(*extractors.CAdvisorMetric) *extractors.CAdvisorMetric
+}
+
+// Option is a function that can be used to configure Cadvisor struct
+type Option func(*Cadvisor)
+
+// WithDecorator constructs an option for configuring the metric decorator
+func WithDecorator(d interface{}) Option {
+	return func(c *Cadvisor) {
+		// do nothing
+	}
+}
+
 // New is a dummy function to construct a dummy Cadvisor struct for windows
-func New(containerOrchestrator string, machineInfo *host.MachineInfo, logger *zap.Logger) *Cadvisor {
-	return &Cadvisor{}
+func New(containerOrchestrator string, hostInfo hostInfo, logger *zap.Logger, options ...Option) (*Cadvisor, error) {
+	return &Cadvisor{}, nil
 }
 
 // GetMetrics is a dummy function that always returns empty metrics for windows
