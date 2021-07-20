@@ -8,6 +8,6 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/stretchr/testify v1.7.0
 	go.opentelemetry.io/collector v0.30.0
-	go.opentelemetry.io/collector/model v0.30.0
+	go.opentelemetry.io/collector/model v0.30.1
 	go.uber.org/zap v1.18.1
 )
