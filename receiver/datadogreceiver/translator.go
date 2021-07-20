@@ -15,11 +15,12 @@
 package datadogreceiver
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/DataDog/datadog-agent/pkg/trace/exportable/pb"
 	"github.com/tinylib/msgp/msgp"
-	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
@@ -29,50 +30,67 @@ import (
 	"strings"
 )
 
-func ToTraces(traces pb.Traces, req *http.Request) pdata.Traces {
+func ToTraces(traces pb.Traces) pdata.Traces {
 	dest := pdata.NewTraces()
-	resSpans := dest.ResourceSpans().AppendEmpty()
-	resAttributes := resSpans.Resource().Attributes()
-	ils := resSpans.InstrumentationLibrarySpans().AppendEmpty()
-
-	resAttributes.InsertString(conventions.AttributeServiceName, traces[0][0].Service)
 	for _, trace := range traces {
-		for _, span := range trace {
-			newSpan := ils.Spans().AppendEmpty() // TODO: Might be more efficient to resize spans and then populate it
-			newSpan.SetTraceID(tracetranslator.UInt64ToTraceID(0, span.TraceID))
-			newSpan.SetSpanID(tracetranslator.UInt64ToSpanID(span.SpanID))
-			newSpan.SetStartTimestamp(pdata.Timestamp(span.Start))
-			newSpan.SetEndTimestamp(pdata.Timestamp(span.Start + span.Duration))
-			newSpan.SetParentSpanID(tracetranslator.UInt64ToSpanID(span.ParentID))
-			newSpan.SetName(span.Name)
-			newSpan.Attributes().InsertString(conventions.AttributeServiceName, span.Service)
+		groupByServiceName := traceGroupByServiceName(trace)
+		for s, p := range groupByServiceName {
+			resSpans := dest.ResourceSpans().AppendEmpty()
+			resAttributes := resSpans.Resource().Attributes()
+			ils := resSpans.InstrumentationLibrarySpans().AppendEmpty()
+			resAttributes.InsertString(conventions.AttributeServiceName, s)
+			for _, span := range *p {
+				newSpan := ils.Spans().AppendEmpty() // TODO: Might be more efficient to resize spans and then populate it
+				newSpan.SetTraceID(uInt64ToTraceID(0, span.TraceID))
+				newSpan.SetSpanID(uInt64ToSpanID(span.SpanID))
+				newSpan.SetStartTimestamp(pdata.Timestamp(span.Start))
+				newSpan.SetEndTimestamp(pdata.Timestamp(span.Start + span.Duration))
+				newSpan.SetParentSpanID(uInt64ToSpanID(span.ParentID))
+				newSpan.SetName(span.Name)
+				newSpan.Attributes().InsertString(conventions.AttributeServiceName, span.Service)
 
-			if val, ok := span.GetMeta()[conventions.AttributeHTTPStatusCode]; ok {
-				code, _ := strconv.Atoi(val)
-				newSpan.Status().SetCode(tracetranslator.StatusCodeFromHTTP(code))
-			}
-			for k, v := range span.GetMeta() {
-				newSpan.Attributes().InsertString(k, v)
-			}
-			if span.Error > 0 {
-				_, errorExists := newSpan.Attributes().Get("error")
-				if errorExists == false {
-					newSpan.Attributes().InsertInt("error", int64(span.Error))
+				if val, ok := span.GetMeta()[conventions.AttributeHTTPStatusCode]; ok {
+					code, _ := strconv.Atoi(val)
+					newSpan.Status().SetCode(tracetranslator.StatusCodeFromHTTP(code))
 				}
-			}
-			switch span.Type {
-			case "web":
-				newSpan.SetKind(pdata.SpanKindSERVER)
-			case "client":
-				newSpan.SetKind(pdata.SpanKindCLIENT)
-			default:
-				newSpan.SetKind(pdata.SpanKindUNSPECIFIED)
+				for k, v := range span.GetMeta() {
+					newSpan.Attributes().InsertString(k, v)
+				}
+				if span.Error > 0 {
+					_, errorExists := newSpan.Attributes().Get("error")
+					if errorExists == false {
+						newSpan.Attributes().InsertInt("error", int64(span.Error))
+					}
+				}
+				switch span.Type {
+				case "web":
+					newSpan.SetKind(pdata.SpanKindServer)
+				case "client":
+					newSpan.SetKind(pdata.SpanKindClient)
+				default:
+					newSpan.SetKind(pdata.SpanKindUnspecified)
+				}
+
 			}
 
 		}
 	}
 
 	return dest
+}
+
+func traceGroupByServiceName(trace pb.Trace) map[string]*pb.Trace {
+	grouped := make(map[string]*pb.Trace)
+
+	for _, span := range trace {
+		t, found := grouped[span.Service]
+		if !found {
+			t = &pb.Trace{}
+			grouped[span.Service] = t
+		}
+		*t = append(*t, span)
+	}
+	return grouped
 }
 
 func decodeRequest(req *http.Request, dest *pb.Traces) error {
@@ -113,4 +131,19 @@ func getMediaType(req *http.Request) string {
 		return "application/json"
 	}
 	return mt
+}
+
+// UInt64ToTraceID converts the pair of uint64 representation of a TraceID to pdata.TraceID.
+func uInt64ToTraceID(high, low uint64) pdata.TraceID {
+	traceID := [16]byte{}
+	binary.BigEndian.PutUint64(traceID[:8], high)
+	binary.BigEndian.PutUint64(traceID[8:], low)
+	return pdata.NewTraceID(traceID)
+}
+
+// UInt64ToSpanID converts the uint64 representation of a SpanID to pdata.SpanID.
+func uInt64ToSpanID(id uint64) pdata.SpanID {
+	spanID := [8]byte{}
+	binary.BigEndian.PutUint64(spanID[:], id)
+	return pdata.NewSpanID(spanID)
 }

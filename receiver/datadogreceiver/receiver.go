@@ -32,17 +32,18 @@ import (
 type datadogReceiver struct {
 	config       *Config
 	id           config.ComponentID
-	params       component.ReceiverCreateParams
+	params       component.ReceiverCreateSettings
 	nextConsumer consumer.Traces
 	server       *http.Server
 	longLivedCtx context.Context
+	obsrecv      *obsreport.Receiver
 
 	mu        sync.Mutex
 	startOnce sync.Once
 	stopOnce  sync.Once
 }
 
-func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params component.ReceiverCreateParams) (component.TracesReceiver, error) {
+func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params component.ReceiverCreateSettings) (component.TracesReceiver, error) {
 	if nextConsumer == nil {
 		return nil, componenterror.ErrNilNextConsumer
 	}
@@ -54,13 +55,14 @@ func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params com
 			ReadTimeout: config.ReadTimeout,
 			Addr:        config.HTTPServerSettings.Endpoint,
 		},
+		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: config.ID(), Transport: collectorHTTPTransport}),
 	}, nil
 }
 
 const collectorHTTPTransport = "http_collector"
 
 func (ddr *datadogReceiver) Start(ctx context.Context, host component.Host) error {
-	ddr.longLivedCtx = obsreport.ReceiverContext(ctx, ddr.config.ID(), collectorHTTPTransport)
+	ddr.longLivedCtx = obsreport.ScraperContext(ctx, ddr.config.ID(), ddr.config.ID())
 	ddmux := mux.NewRouter()
 	ddmux.HandleFunc("/v0.3/traces", ddr.handleTraces)
 	ddmux.HandleFunc("/v0.4/traces", ddr.handleTraces)
@@ -83,17 +85,17 @@ func (ddr *datadogReceiver) Shutdown(ctx context.Context) error {
 }
 
 func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Request) {
-	obsreport.StartTraceDataReceiveOp(ddr.longLivedCtx, ddr.config.ID(), "http")
+	ddr.obsrecv.StartTracesOp(ddr.longLivedCtx)
 	var ddTraces pb.Traces
 
 	err := decodeRequest(req, &ddTraces)
 	if err != nil {
 		http.Error(w, "Unable to unmarshal reqs", http.StatusInternalServerError)
-		obsreport.EndTraceDataReceiveOp(ddr.longLivedCtx, typeStr, 0, err)
+		ddr.obsrecv.EndTracesOp(ddr.longLivedCtx, typeStr, 0, err)
 		return
 	}
 
-	otelTraces := ToTraces(ddTraces, req)
+	otelTraces := ToTraces(ddTraces)
 	spanCount := otelTraces.SpanCount()
 	err = ddr.nextConsumer.ConsumeTraces(req.Context(), otelTraces)
 	if err != nil {
@@ -102,5 +104,5 @@ func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Reques
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	}
-	obsreport.EndTraceDataReceiveOp(ddr.longLivedCtx, typeStr, spanCount, err)
+	ddr.obsrecv.EndTracesOp(ddr.longLivedCtx, typeStr, spanCount, err)
 }
