@@ -11,6 +11,6 @@ require (
 	github.com/tcnksm/ghr v0.14.0
 	go.opentelemetry.io/collector/cmd/checkdoc v0.30.0
 	go.opentelemetry.io/collector/cmd/issuegenerator v0.30.0
-	go.opentelemetry.io/collector/cmd/mdatagen v0.30.0
+	go.opentelemetry.io/collector/cmd/mdatagen v0.30.1
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83 // indirect
 )
