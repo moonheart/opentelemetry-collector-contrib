@@ -9,6 +9,6 @@ require (
 	go.opentelemetry.io/collector v0.30.2-0.20210723184018-3b7d6ce4830c
 	go.opentelemetry.io/collector/model v0.30.2-0.20210723184018-3b7d6ce4830c // indirect
 	go.uber.org/multierr v1.7.0
-	go.uber.org/zap v1.18.1
+	go.uber.org/zap v1.19.0
 	gopkg.in/yaml.v2 v2.4.0
 )
