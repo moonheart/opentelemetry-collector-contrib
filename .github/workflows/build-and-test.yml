@@ -24,7 +24,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
         shell: bash
       - name: Cache Go
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -56,7 +56,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -66,7 +66,7 @@ jobs:
           key: v1-go-pkg-mod-${{ runner.os }}-${{ hashFiles('**/go.mod', '**/go.sum') }}
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
@@ -102,7 +102,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -112,7 +112,7 @@ jobs:
           key: v1-go-pkg-mod-${{ runner.os }}-${{ hashFiles('**/go.mod', '**/go.sum') }}
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
@@ -142,7 +142,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -152,7 +152,7 @@ jobs:
           key: v1-go-pkg-mod-${{ runner.os }}-${{ hashFiles('**/go.mod', '**/go.sum') }}
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
@@ -176,7 +176,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -186,7 +186,7 @@ jobs:
           key: v1-go-pkg-mod-${{ runner.os }}-${{ hashFiles('**/go.mod', '**/go.sum') }}
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
@@ -218,7 +218,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -269,7 +269,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -295,7 +295,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
@@ -304,7 +304,7 @@ jobs:
       - run: sudo chmod 0777 -R /opt
       - name: Fluentbit Cache
         id: fluentbit-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-fluentbit
         with:
@@ -326,7 +326,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: module-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-go-modules
         with:
@@ -412,7 +412,7 @@ jobs:
           path: ./bin/
       - name: Cache Wix
         id: wix-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-wix
         with:
@@ -476,7 +476,7 @@ jobs:
 
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
@@ -534,7 +534,7 @@ jobs:
 
       - name: Cache Tools
         id: tool-cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3.0.1
         env:
           cache-name: cache-tool-binaries
         with:
