@@ -232,7 +232,7 @@ jobs:
           TEST_ARGS="-test.run=${matrix.test}" make stability-tests
       - name: Upload Unit Test Results
         if: always()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: unittests-results
           path: test-results/junit/results.xml
@@ -280,7 +280,7 @@ jobs:
       - name: Build Collector ${{ matrix.binary }}
         run: make otelcontribcol-${{ matrix.binary }}
       - name: Upload Collector Binaries
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: collector-binaries
           path: ./bin/*
@@ -347,7 +347,7 @@ jobs:
       - name: Upload Test Results
         if: ${{ failure() || success() }}
         continue-on-error: true
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: test-results
           path: test_results.tar
@@ -393,7 +393,7 @@ jobs:
               ./internal/buildscripts/packaging/fpm/test.sh dist/otel-contrib-collector*x86_64.rpm examples/tracing/otel-collector-config.yml
           fi
       - name: Upload Packages
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: collector-packages
           path: ./dist/*
@@ -430,7 +430,7 @@ jobs:
       - name: Validate MSI
         run: .\internal\buildscripts\packaging\msi\make.ps1 Confirm-MSI
       - name: Upload MSI
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: collector-packages
           path: ./dist/*.msi
