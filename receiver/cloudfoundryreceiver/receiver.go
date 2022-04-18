@@ -25,9 +25,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenterror"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/obsreport"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
 const (
@@ -40,7 +39,7 @@ var _ component.MetricsReceiver = (*cloudFoundryReceiver)(nil)
 
 // newCloudFoundryReceiver implements the component.MetricsReceiver for Cloud Foundry protocol.
 type cloudFoundryReceiver struct {
-	logger            *zap.Logger
+	settings          component.TelemetrySettings
 	cancel            context.CancelFunc
 	config            Config
 	nextConsumer      consumer.Metrics
@@ -60,7 +59,7 @@ func newCloudFoundryReceiver(
 	}
 
 	return &cloudFoundryReceiver{
-		logger:       settings.Logger,
+		settings:     settings.TelemetrySettings,
 		config:       config,
 		nextConsumer: nextConsumer,
 		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{
@@ -73,13 +72,13 @@ func newCloudFoundryReceiver(
 }
 
 func (cfr *cloudFoundryReceiver) Start(ctx context.Context, host component.Host) error {
-	tokenProvider, tokenErr := newUAATokenProvider(cfr.logger, cfr.config.UAA.LimitedHTTPClientSettings, cfr.config.UAA.Username, cfr.config.UAA.Password)
+	tokenProvider, tokenErr := newUAATokenProvider(cfr.settings.Logger, cfr.config.UAA.LimitedHTTPClientSettings, cfr.config.UAA.Username, cfr.config.UAA.Password)
 	if tokenErr != nil {
 		return fmt.Errorf("create cloud foundry UAA token provider: %v", tokenErr)
 	}
 
 	streamFactory, streamErr := newEnvelopeStreamFactory(
-		cfr.logger,
+		cfr.settings,
 		tokenProvider,
 		cfr.config.RLPGateway.HTTPClientSettings,
 		host,
@@ -95,7 +94,7 @@ func (cfr *cloudFoundryReceiver) Start(ctx context.Context, host component.Host)
 
 	go func() {
 		defer cfr.goroutines.Done()
-		cfr.logger.Debug("cloud foundry receiver starting")
+		cfr.settings.Logger.Debug("cloud foundry receiver starting")
 
 		_, tokenErr = tokenProvider.ProvideToken()
 		if tokenErr != nil {
@@ -110,7 +109,7 @@ func (cfr *cloudFoundryReceiver) Start(ctx context.Context, host component.Host)
 		}
 
 		cfr.streamMetrics(innerCtx, envelopeStream, host)
-		cfr.logger.Debug("cloudfoundry metrics streamer stopped")
+		cfr.settings.Logger.Debug("cloudfoundry metrics streamer stopped")
 	}()
 
 	return nil
@@ -139,7 +138,7 @@ func (cfr *cloudFoundryReceiver) streamMetrics(
 			break
 		}
 
-		metrics := pdata.NewMetrics()
+		metrics := pmetric.NewMetrics()
 		libraryMetrics := createLibraryMetricsSlice(metrics)
 
 		for _, envelope := range envelopes {
@@ -158,12 +157,12 @@ func (cfr *cloudFoundryReceiver) streamMetrics(
 	}
 }
 
-func createLibraryMetricsSlice(metrics pdata.Metrics) pdata.MetricSlice {
+func createLibraryMetricsSlice(metrics pmetric.Metrics) pmetric.MetricSlice {
 	resourceMetrics := metrics.ResourceMetrics()
 	resourceMetric := resourceMetrics.AppendEmpty()
 	resourceMetric.Resource().Attributes()
-	libraryMetricsSlice := resourceMetric.InstrumentationLibraryMetrics()
+	libraryMetricsSlice := resourceMetric.ScopeMetrics()
 	libraryMetrics := libraryMetricsSlice.AppendEmpty()
-	libraryMetrics.InstrumentationLibrary().SetName(instrumentationLibName)
+	libraryMetrics.Scope().SetName(instrumentationLibName)
 	return libraryMetrics.Metrics()
 }

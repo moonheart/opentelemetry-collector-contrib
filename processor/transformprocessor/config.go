@@ -16,10 +16,16 @@ package transformprocessor // import "github.com/open-telemetry/opentelemetry-co
 
 import (
 	"go.opentelemetry.io/collector/config"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor/internal/common"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor/internal/traces"
 )
 
 type TracesConfig struct {
 	Queries []string `mapstructure:"queries"`
+
+	// The functions that have been registered in the extension for traces processing.
+	functions map[string]interface{} `mapstructure:"-"`
 }
 
 type Config struct {
@@ -29,3 +35,8 @@ type Config struct {
 }
 
 var _ config.Processor = (*Config)(nil)
+
+func (c *Config) Validate() error {
+	_, err := common.ParseQueries(c.Traces.Queries, c.Traces.functions, traces.ParsePath)
+	return err
+}

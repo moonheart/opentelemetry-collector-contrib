@@ -18,7 +18,6 @@ package tests
 // coded in this file or use scenarios from perf_scenarios.go.
 
 import (
-	"path"
 	"path/filepath"
 	"testing"
 
@@ -44,7 +43,7 @@ func TestMetric10kDPS(t *testing.T) {
 			datareceivers.NewCarbonDataReceiver(testbed.GetAvailablePort(t)),
 			testbed.ResourceSpec{
 				ExpectedMaxCPU: 237,
-				ExpectedMaxRAM: 90,
+				ExpectedMaxRAM: 100,
 			},
 		},
 		{
@@ -61,8 +60,8 @@ func TestMetric10kDPS(t *testing.T) {
 			testbed.NewOTLPMetricDataSender(testbed.DefaultHost, testbed.GetAvailablePort(t)),
 			testbed.NewOTLPDataReceiver(testbed.GetAvailablePort(t)),
 			testbed.ResourceSpec{
-				ExpectedMaxCPU: 50,
-				ExpectedMaxRAM: 98,
+				ExpectedMaxCPU: 60,
+				ExpectedMaxRAM: 105,
 			},
 		},
 		{
@@ -70,8 +69,8 @@ func TestMetric10kDPS(t *testing.T) {
 			testbed.NewOTLPHTTPMetricDataSender(testbed.DefaultHost, testbed.GetAvailablePort(t)),
 			testbed.NewOTLPHTTPDataReceiver(testbed.GetAvailablePort(t)),
 			testbed.ResourceSpec{
-				ExpectedMaxCPU: 50,
-				ExpectedMaxRAM: 92,
+				ExpectedMaxCPU: 60,
+				ExpectedMaxRAM: 100,
 			},
 		},
 		{
@@ -105,7 +104,7 @@ func TestMetricsFromFile(t *testing.T) {
 	// This test demonstrates usage of NewFileDataProvider to generate load using
 	// previously recorded data.
 
-	resultDir, err := filepath.Abs(path.Join("results", t.Name()))
+	resultDir, err := filepath.Abs(filepath.Join("results", t.Name()))
 	require.NoError(t, err)
 
 	// Use metrics previously recorded using "file" exporter and "k8scluster" receiver.
@@ -136,7 +135,7 @@ func TestMetricsFromFile(t *testing.T) {
 		agentProc,
 		&testbed.PerfTestValidator{},
 		performanceResultsSummary,
-		testbed.WithResourceLimits(testbed.ResourceSpec{ExpectedMaxCPU: 120, ExpectedMaxRAM: 94}),
+		testbed.WithResourceLimits(testbed.ResourceSpec{ExpectedMaxCPU: 120, ExpectedMaxRAM: 110}),
 	)
 	defer tc.Stop()
 

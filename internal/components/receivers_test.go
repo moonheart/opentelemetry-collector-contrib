@@ -30,7 +30,7 @@ import (
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/testutil"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/stanza"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver"
@@ -61,6 +61,9 @@ func TestDefaultReceivers(t *testing.T) {
 			skipLifecyle: true, // Requires container metaendpoint to be running
 		},
 		{
+			receiver: "awsfirehose",
+		},
+		{
 			receiver:     "awsxray",
 			skipLifecyle: true, // Requires AWS endpoint to check identity to run
 		},
@@ -72,6 +75,10 @@ func TestDefaultReceivers(t *testing.T) {
 				return cfg
 			},
 			skipLifecyle: true, // Panics after test have completed, requires a wait group
+		},
+		{
+			receiver:     "cloudfoundry",
+			skipLifecyle: true, // Requires UAA (auth) endpoint to run
 		},
 		{
 			receiver: "collectd",
@@ -109,6 +116,10 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "influxdb",
 		},
 		{
+			receiver:     "iis",
+			skipLifecyle: true, // Requires a running windows process
+		},
+		{
 			receiver: "jaeger",
 		},
 		{
@@ -118,6 +129,10 @@ func TestDefaultReceivers(t *testing.T) {
 		{
 			receiver:     "journald",
 			skipLifecyle: runtime.GOOS != "linux",
+		},
+		{
+			receiver:     "k8s_events",
+			skipLifecyle: true, // need a valid Kubernetes host and port
 		},
 		{
 			receiver:     "kafka",
@@ -141,6 +156,9 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "mongodbatlas",
 		},
 		{
+			receiver: "mysql",
+		},
+		{
 			receiver:     "opencensus",
 			skipLifecyle: true, // TODO: Usage of CMux doesn't allow proper shutdown.
 		},
@@ -150,6 +168,9 @@ func TestDefaultReceivers(t *testing.T) {
 		{
 			receiver:     "podman_stats",
 			skipLifecyle: true, // Requires a running podman daemon
+		},
+		{
+			receiver: "postgresql",
 		},
 		{
 			receiver: "prometheus",
@@ -174,6 +195,9 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "redis",
 		},
 		{
+			receiver: "riak",
+		},
+		{
 			receiver: "sapm",
 		},
 		{
@@ -183,7 +207,14 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "prometheus_simple",
 		},
 		{
+			receiver: "skywalking",
+		},
+		{
 			receiver: "splunk_hec",
+		},
+		{
+			receiver:     "sqlserver",
+			skipLifecyle: true, // Requires a running windows process
 		},
 		{
 			receiver: "statsd",

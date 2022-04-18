@@ -19,7 +19,8 @@ import (
 	"strconv"
 	"time"
 
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/memcachedreceiver/internal/metadata"
@@ -42,25 +43,25 @@ func newMemcachedScraper(
 	}
 }
 
-func (r *memcachedScraper) scrape(_ context.Context) (pdata.Metrics, error) {
+func (r *memcachedScraper) scrape(_ context.Context) (pmetric.Metrics, error) {
 	// Init client in scrape method in case there are transient errors in the
 	// constructor.
 	statsClient, err := r.newClient(r.config.Endpoint, r.config.Timeout)
 	if err != nil {
 		r.logger.Error("Failed to estalbish client", zap.Error(err))
-		return pdata.Metrics{}, err
+		return pmetric.Metrics{}, err
 	}
 
 	allServerStats, err := statsClient.Stats()
 	if err != nil {
 		r.logger.Error("Failed to fetch memcached stats", zap.Error(err))
-		return pdata.Metrics{}, err
+		return pmetric.Metrics{}, err
 	}
 
-	now := pdata.NewTimestampFromTime(time.Now())
-	md := pdata.NewMetrics()
-	ilm := md.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
-	ilm.InstrumentationLibrary().SetName("otelcol/memcached")
+	now := pcommon.NewTimestampFromTime(time.Now())
+	md := pmetric.NewMetrics()
+	ilm := md.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty()
+	ilm.Scope().SetName("otelcol/memcached")
 
 	commandCount := initMetric(ilm.Metrics(), metadata.M.MemcachedCommands).Sum().DataPoints()
 	rUsage := initMetric(ilm.Metrics(), metadata.M.MemcachedCPUUsage).Sum().DataPoints()
@@ -76,7 +77,7 @@ func (r *memcachedScraper) scrape(_ context.Context) (pdata.Metrics, error) {
 
 	for _, stats := range allServerStats {
 		for k, v := range stats.Stats {
-			attributes := pdata.NewAttributeMap()
+			attributes := pcommon.NewMap()
 			switch k {
 			case "bytes":
 				if parsedV, ok := r.parseInt(k, v); ok {
@@ -91,22 +92,22 @@ func (r *memcachedScraper) scrape(_ context.Context) (pdata.Metrics, error) {
 					r.addToIntMetric(totalConn, attributes, parsedV, now)
 				}
 			case "cmd_get":
-				attributes.Insert(metadata.A.Command, pdata.NewAttributeValueString("get"))
+				attributes.Insert(metadata.A.Command, pcommon.NewValueString("get"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(commandCount, attributes, parsedV, now)
 				}
 			case "cmd_set":
-				attributes.Insert(metadata.A.Command, pdata.NewAttributeValueString("set"))
+				attributes.Insert(metadata.A.Command, pcommon.NewValueString("set"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(commandCount, attributes, parsedV, now)
 				}
 			case "cmd_flush":
-				attributes.Insert(metadata.A.Command, pdata.NewAttributeValueString("flush"))
+				attributes.Insert(metadata.A.Command, pcommon.NewValueString("flush"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(commandCount, attributes, parsedV, now)
 				}
 			case "cmd_touch":
-				attributes.Insert(metadata.A.Command, pdata.NewAttributeValueString("touch"))
+				attributes.Insert(metadata.A.Command, pcommon.NewValueString("touch"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(commandCount, attributes, parsedV, now)
 				}
@@ -125,59 +126,59 @@ func (r *memcachedScraper) scrape(_ context.Context) (pdata.Metrics, error) {
 					r.addToIntMetric(evictions, attributes, parsedV, now)
 				}
 			case "bytes_read":
-				attributes.Insert(metadata.A.Direction, pdata.NewAttributeValueString("received"))
+				attributes.Insert(metadata.A.Direction, pcommon.NewValueString("received"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(network, attributes, parsedV, now)
 				}
 			case "bytes_written":
-				attributes.Insert(metadata.A.Direction, pdata.NewAttributeValueString("sent"))
+				attributes.Insert(metadata.A.Direction, pcommon.NewValueString("sent"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(network, attributes, parsedV, now)
 				}
 			case "get_hits":
-				attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("get"))
-				attributes.Insert(metadata.A.Type, pdata.NewAttributeValueString("hit"))
+				attributes.Insert(metadata.A.Operation, pcommon.NewValueString("get"))
+				attributes.Insert(metadata.A.Type, pcommon.NewValueString("hit"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(operationCount, attributes, parsedV, now)
 				}
 			case "get_misses":
-				attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("get"))
-				attributes.Insert(metadata.A.Type, pdata.NewAttributeValueString("miss"))
+				attributes.Insert(metadata.A.Operation, pcommon.NewValueString("get"))
+				attributes.Insert(metadata.A.Type, pcommon.NewValueString("miss"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(operationCount, attributes, parsedV, now)
 				}
 			case "incr_hits":
-				attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("increment"))
-				attributes.Insert(metadata.A.Type, pdata.NewAttributeValueString("hit"))
+				attributes.Insert(metadata.A.Operation, pcommon.NewValueString("increment"))
+				attributes.Insert(metadata.A.Type, pcommon.NewValueString("hit"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(operationCount, attributes, parsedV, now)
 				}
 			case "incr_misses":
-				attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("increment"))
-				attributes.Insert(metadata.A.Type, pdata.NewAttributeValueString("miss"))
+				attributes.Insert(metadata.A.Operation, pcommon.NewValueString("increment"))
+				attributes.Insert(metadata.A.Type, pcommon.NewValueString("miss"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(operationCount, attributes, parsedV, now)
 				}
 			case "decr_hits":
-				attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("decrement"))
-				attributes.Insert(metadata.A.Type, pdata.NewAttributeValueString("hit"))
+				attributes.Insert(metadata.A.Operation, pcommon.NewValueString("decrement"))
+				attributes.Insert(metadata.A.Type, pcommon.NewValueString("hit"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(operationCount, attributes, parsedV, now)
 				}
 			case "decr_misses":
-				attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("decrement"))
-				attributes.Insert(metadata.A.Type, pdata.NewAttributeValueString("miss"))
+				attributes.Insert(metadata.A.Operation, pcommon.NewValueString("decrement"))
+				attributes.Insert(metadata.A.Type, pcommon.NewValueString("miss"))
 				if parsedV, ok := r.parseInt(k, v); ok {
 					r.addToIntMetric(operationCount, attributes, parsedV, now)
 				}
 			case "rusage_system":
-				attributes.Insert(metadata.A.State, pdata.NewAttributeValueString("system"))
+				attributes.Insert(metadata.A.State, pcommon.NewValueString("system"))
 				if parsedV, ok := r.parseFloat(k, v); ok {
 					r.addToDoubleMetric(rUsage, attributes, parsedV, now)
 				}
 
 			case "rusage_user":
-				attributes.Insert(metadata.A.State, pdata.NewAttributeValueString("user"))
+				attributes.Insert(metadata.A.State, pcommon.NewValueString("user"))
 				if parsedV, ok := r.parseFloat(k, v); ok {
 					r.addToDoubleMetric(rUsage, attributes, parsedV, now)
 				}
@@ -185,24 +186,24 @@ func (r *memcachedScraper) scrape(_ context.Context) (pdata.Metrics, error) {
 		}
 
 		// Calculated Metrics
-		attributes := pdata.NewAttributeMap()
-		attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("increment"))
+		attributes := pcommon.NewMap()
+		attributes.Insert(metadata.A.Operation, pcommon.NewValueString("increment"))
 		parsedHit, okHit := r.parseInt("incr_hits", stats.Stats["incr_hits"])
 		parsedMiss, okMiss := r.parseInt("incr_misses", stats.Stats["incr_misses"])
 		if okHit && okMiss {
 			r.addToDoubleMetric(hitRatio, attributes, calculateHitRatio(parsedHit, parsedMiss), now)
 		}
 
-		attributes = pdata.NewAttributeMap()
-		attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("decrement"))
+		attributes = pcommon.NewMap()
+		attributes.Insert(metadata.A.Operation, pcommon.NewValueString("decrement"))
 		parsedHit, okHit = r.parseInt("decr_hits", stats.Stats["decr_hits"])
 		parsedMiss, okMiss = r.parseInt("decr_misses", stats.Stats["decr_misses"])
 		if okHit && okMiss {
 			r.addToDoubleMetric(hitRatio, attributes, calculateHitRatio(parsedHit, parsedMiss), now)
 		}
 
-		attributes = pdata.NewAttributeMap()
-		attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString("get"))
+		attributes = pcommon.NewMap()
+		attributes.Insert(metadata.A.Operation, pcommon.NewValueString("get"))
 		parsedHit, okHit = r.parseInt("get_hits", stats.Stats["get_hits"])
 		parsedMiss, okMiss = r.parseInt("get_misses", stats.Stats["get_misses"])
 		if okHit && okMiss {
@@ -212,7 +213,7 @@ func (r *memcachedScraper) scrape(_ context.Context) (pdata.Metrics, error) {
 	return md, nil
 }
 
-func initMetric(ms pdata.MetricSlice, mi metadata.MetricIntf) pdata.Metric {
+func initMetric(ms pmetric.MetricSlice, mi metadata.MetricIntf) pmetric.Metric {
 	m := ms.AppendEmpty()
 	mi.Init(m)
 	return m
@@ -256,7 +257,7 @@ func (r *memcachedScraper) logInvalid(expectedType, key, value string) {
 	)
 }
 
-func (r *memcachedScraper) addToDoubleMetric(metric pdata.NumberDataPointSlice, attributes pdata.AttributeMap, value float64, now pdata.Timestamp) {
+func (r *memcachedScraper) addToDoubleMetric(metric pmetric.NumberDataPointSlice, attributes pcommon.Map, value float64, now pcommon.Timestamp) {
 	dataPoint := metric.AppendEmpty()
 	dataPoint.SetTimestamp(now)
 	dataPoint.SetDoubleVal(value)
@@ -265,7 +266,7 @@ func (r *memcachedScraper) addToDoubleMetric(metric pdata.NumberDataPointSlice, 
 	}
 }
 
-func (r *memcachedScraper) addToIntMetric(metric pdata.NumberDataPointSlice, attributes pdata.AttributeMap, value int64, now pdata.Timestamp) {
+func (r *memcachedScraper) addToIntMetric(metric pmetric.NumberDataPointSlice, attributes pcommon.Map, value int64, now pcommon.Timestamp) {
 	dataPoint := metric.AppendEmpty()
 	dataPoint.SetTimestamp(now)
 	dataPoint.SetIntVal(value)

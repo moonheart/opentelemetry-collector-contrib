@@ -34,8 +34,8 @@ datadog:
 datadog:
   api:
     key: "<API key>"
-    traces:
-      span_name_as_resource_name: true
+  traces:
+    span_name_as_resource_name: true
 ```
 
 The hostname, environment, service and version can be set in the configuration for unified service tagging.
@@ -68,12 +68,9 @@ processors:
 exporters:
   datadog/api:
     hostname: customhostname
-    env: prod
-    service: myservice
-    version: myversion
 
-    tags:
-      - example:tag
+    host_metadata:
+      tags: [example:tag]
 
     api:
       key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

@@ -17,8 +17,8 @@ package internal // import "github.com/open-telemetry/opentelemetry-collector-co
 import (
 	"net"
 
-	"go.opentelemetry.io/collector/model/pdata"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.5.0"
+	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 // isDiscernibleHost checks if a host can be used as a value for the 'host.name' key.
@@ -41,21 +41,20 @@ func isDiscernibleHost(host string) bool {
 }
 
 // CreateNodeAndResourcePdata creates the resource data added to OTLP payloads.
-func CreateNodeAndResourcePdata(job, instance, scheme string) *pdata.Resource {
+func CreateNodeAndResourcePdata(job, instance, scheme string) *pcommon.Resource {
 	host, port, err := net.SplitHostPort(instance)
 	if err != nil {
 		host = instance
 	}
-	resource := pdata.NewResource()
+	resource := pcommon.NewResource()
 	attrs := resource.Attributes()
 	attrs.UpsertString(conventions.AttributeServiceName, job)
 	if isDiscernibleHost(host) {
-		attrs.UpsertString(conventions.AttributeHostName, host)
+		attrs.UpsertString(conventions.AttributeNetHostName, host)
 	}
-	attrs.UpsertString(jobAttr, job)
-	attrs.UpsertString(instanceAttr, instance)
-	attrs.UpsertString(portAttr, port)
-	attrs.UpsertString(schemeAttr, scheme)
+	attrs.UpsertString(conventions.AttributeServiceInstanceID, instance)
+	attrs.UpsertString(conventions.AttributeNetHostPort, port)
+	attrs.UpsertString(conventions.AttributeHTTPScheme, scheme)
 
 	return &resource
 }

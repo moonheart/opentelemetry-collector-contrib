@@ -19,7 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	colconfig "go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.uber.org/zap"
 )
@@ -113,6 +113,31 @@ func TestDefaultSite(t *testing.T) {
 	assert.Equal(t, cfg.API.Site, DefaultSite)
 }
 
+func TestDefaultTLSSettings(t *testing.T) {
+	cfg := Config{
+		API: APIConfig{Key: "notnull"},
+	}
+
+	err := cfg.Sanitize(zap.NewNop())
+	require.NoError(t, err)
+	assert.Equal(t, cfg.LimitedHTTPClientSettings.TLSSetting.InsecureSkipVerify, false)
+}
+
+func TestTLSSettings(t *testing.T) {
+	cfg := Config{
+		API: APIConfig{Key: "notnull"},
+		LimitedHTTPClientSettings: LimitedHTTPClientSettings{
+			TLSSetting: LimitedTLSClientSettings{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	err := cfg.Sanitize(zap.NewNop())
+	require.NoError(t, err)
+	assert.Equal(t, cfg.TLSSetting.InsecureSkipVerify, true)
+}
+
 func TestAPIKeyUnset(t *testing.T) {
 	cfg := Config{}
 	err := cfg.Sanitize(zap.NewNop())
@@ -136,18 +161,6 @@ func TestInvalidHostname(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCensorAPIKey(t *testing.T) {
-	cfg := APIConfig{
-		Key: "ddog_32_characters_long_api_key1",
-	}
-
-	assert.Equal(
-		t,
-		"***************************_key1",
-		cfg.GetCensoredKey(),
-	)
-}
-
 func TestIgnoreResourcesValidation(t *testing.T) {
 	validCfg := Config{Traces: TracesConfig{IgnoreResources: []string{"[123]"}}}
 	invalidCfg := Config{Traces: TracesConfig{IgnoreResources: []string{"[123"}}}
@@ -167,54 +180,43 @@ func TestSpanNameRemappingsValidation(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestErrorReportBuckets(t *testing.T) {
-
+func TestUnmarshal(t *testing.T) {
 	tests := []struct {
-		name          string
-		stringMap     map[string]interface{}
-		expectedError error
+		name      string
+		configMap *config.Map
+		cfg       Config
+		err       string
 	}{
 		{
-			name: "report buckets false",
-			stringMap: map[string]interface{}{
-				"api": map[string]interface{}{"key": "aaa"},
+			name: "invalid cumulative monotonic mode",
+			configMap: config.NewMapFromStringMap(map[string]interface{}{
 				"metrics": map[string]interface{}{
-					"report_buckets": false,
+					"sums": map[string]interface{}{
+						"cumulative_monotonic_mode": "invalid_mode",
+					},
 				},
-			},
-			expectedError: errBuckets,
+			}),
+			err: "1 error(s) decoding:\n\n* error decoding 'metrics.sums.cumulative_monotonic_mode': invalid cumulative monotonic sum mode \"invalid_mode\"",
 		},
 		{
-			name: "report buckets true",
-			stringMap: map[string]interface{}{
-				"api": map[string]interface{}{"key": "aaa"},
-				"metrics": map[string]interface{}{
-					"report_buckets": true,
+			name: "invalid host metadata hostname source",
+			configMap: config.NewMapFromStringMap(map[string]interface{}{
+				"host_metadata": map[string]interface{}{
+					"hostname_source": "invalid_source",
 				},
-			},
-			expectedError: errBuckets,
-		},
-		{
-			name: "no report buckets",
-			stringMap: map[string]interface{}{
-				"api": map[string]interface{}{"key": "aaa"},
-			},
-			expectedError: nil,
+			}),
+			err: "1 error(s) decoding:\n\n* error decoding 'host_metadata.hostname_source': invalid host metadata hostname source \"invalid_source\"",
 		},
 	}
 
 	for _, testInstance := range tests {
 		t.Run(testInstance.name, func(t *testing.T) {
-			// default config for buckets
-			config := Config{Metrics: MetricsConfig{HistConfig: HistogramConfig{Mode: histogramModeDistributions}}}
-			configMap := colconfig.NewMapFromStringMap(testInstance.stringMap)
-			err := config.Unmarshal(configMap)
-
-			if testInstance.expectedError != nil {
-				require.Error(t, err)
-				require.ErrorIs(t, testInstance.expectedError, err)
+			cfg := futureDefaultConfig()
+			err := cfg.Unmarshal(testInstance.configMap)
+			if err != nil || testInstance.err != "" {
+				assert.EqualError(t, err, testInstance.err)
 			} else {
-				require.NoError(t, err)
+				assert.Equal(t, testInstance.cfg, cfg)
 			}
 		})
 	}

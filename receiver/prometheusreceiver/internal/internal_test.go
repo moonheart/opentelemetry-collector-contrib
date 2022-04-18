@@ -15,7 +15,7 @@
 package internal
 
 import (
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/scrape"
 	"go.opentelemetry.io/collector/obsreport/obsreporttest"
 	"go.uber.org/zap"
@@ -48,10 +48,11 @@ func (m *mockMetadataCache) SharedLabels() labels.Labels {
 	return labels.FromStrings("__scheme__", "http")
 }
 
-type mockScrapeManager struct {
-	targets map[string][]*scrape.Target
-}
+type noopMetricMetadataStore struct{}
 
-func (sm *mockScrapeManager) TargetsAll() map[string][]*scrape.Target {
-	return sm.targets
+func (noopMetricMetadataStore) ListMetadata() []scrape.MetricMetadata { return nil }
+func (noopMetricMetadataStore) GetMetadata(metric string) (scrape.MetricMetadata, bool) {
+	return scrape.MetricMetadata{}, false
 }
+func (noopMetricMetadataStore) SizeMetadata() int   { return 0 }
+func (noopMetricMetadataStore) LengthMetadata() int { return 0 }

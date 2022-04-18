@@ -23,20 +23,27 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/wavefronthq/wavefront-sdk-go/senders"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultApplicationName = "defaultApp"
-	defaultServiceName     = "defaultService"
-	labelApplication       = "application"
-	labelError             = "error"
-	labelEventName         = "name"
-	labelService           = "service"
-	labelSpanKind          = "span.kind"
+	defaultApplicationName  = "defaultApp"
+	defaultServiceName      = "defaultService"
+	labelApplication        = "application"
+	labelError              = "error"
+	labelEventName          = "name"
+	labelService            = "service"
+	labelSpanKind           = "span.kind"
+	labelSource             = "source"
+	labelDroppedEventsCount = "otel.dropped_events_count"
+	labelDroppedLinksCount  = "otel.dropped_links_count"
+	labelDroppedAttrsCount  = "otel.dropped_attributes_count"
+	labelOtelScopeName      = "otel.scope.name"
+	labelOtelScopeVersion   = "otel.scope.version"
 )
 
 // spanSender Interface for sending tracing spans to Tanzu Observability
@@ -56,7 +63,7 @@ type tracesExporter struct {
 	logger *zap.Logger
 }
 
-func newTracesExporter(l *zap.Logger, c config.Exporter) (*tracesExporter, error) {
+func newTracesExporter(settings component.ExporterCreateSettings, c config.Exporter) (*tracesExporter, error) {
 	cfg, ok := c.(*Config)
 	if !ok {
 		return nil, fmt.Errorf("invalid config: %#v", c)
@@ -79,6 +86,7 @@ func newTracesExporter(l *zap.Logger, c config.Exporter) (*tracesExporter, error
 		MetricsPort:          2878,
 		TracingPort:          tracingPort,
 		FlushIntervalSeconds: 1,
+		SDKMetricsTags:       map[string]string{"otel.traces.collector_version": settings.BuildInfo.Version},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create proxy sender: %v", err)
@@ -87,19 +95,23 @@ func newTracesExporter(l *zap.Logger, c config.Exporter) (*tracesExporter, error
 	return &tracesExporter{
 		cfg:    cfg,
 		sender: s,
-		logger: l,
+		logger: settings.Logger,
 	}, nil
 }
 
-func (e *tracesExporter) pushTraceData(ctx context.Context, td pdata.Traces) error {
+func (e *tracesExporter) pushTraceData(ctx context.Context, td ptrace.Traces) error {
 	var errs error
 
 	for i := 0; i < td.ResourceSpans().Len(); i++ {
 		rspans := td.ResourceSpans().At(i)
 		resource := rspans.Resource()
-		for j := 0; j < rspans.InstrumentationLibrarySpans().Len(); j++ {
-			ispans := rspans.InstrumentationLibrarySpans().At(j)
+		for j := 0; j < rspans.ScopeSpans().Len(); j++ {
+			ispans := rspans.ScopeSpans().At(j)
 			transform := newTraceTransformer(resource)
+
+			libraryName := ispans.Scope().Name()
+			libraryVersion := ispans.Scope().Version()
+
 			for k := 0; k < ispans.Spans().Len(); k++ {
 				select {
 				case <-ctx.Done():
@@ -109,6 +121,14 @@ func (e *tracesExporter) pushTraceData(ctx context.Context, td pdata.Traces) err
 					if err != nil {
 						errs = multierr.Append(errs, err)
 						continue
+					}
+
+					if libraryName != "" {
+						transformedSpan.Tags[labelOtelScopeName] = libraryName
+					}
+
+					if libraryVersion != "" {
+						transformedSpan.Tags[labelOtelScopeVersion] = libraryVersion
 					}
 
 					if err := e.recordSpan(transformedSpan); err != nil {
@@ -134,7 +154,7 @@ func (e *tracesExporter) recordSpan(span span) error {
 		span.Name,
 		span.StartMillis,
 		span.DurationMillis,
-		"",
+		span.Source,
 		span.TraceID.String(),
 		span.SpanID.String(),
 		parents,

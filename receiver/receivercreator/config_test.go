@@ -16,13 +16,12 @@ package receivercreator
 
 import (
 	"context"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componenthelper"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
@@ -62,7 +61,7 @@ func exampleCreatorFactory(t *testing.T) (*mockHostFactories, *config.Config) {
 
 	factory := NewFactory()
 	factories.Receivers[typeStr] = factory
-	cfg, err := servicetest.LoadConfigAndValidate(path.Join(".", "testdata", "config.yaml"), factories)
+	cfg, err := servicetest.LoadConfigAndValidate(filepath.Join("testdata", "config.yaml"), factories)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -113,13 +112,18 @@ func (*nopWithEndpointFactory) CreateDefaultConfig() config.Receiver {
 	}
 }
 
+type mockComponent struct {
+	component.StartFunc
+	component.ShutdownFunc
+}
+
 func (*nopWithEndpointFactory) CreateMetricsReceiver(
 	ctx context.Context,
 	_ component.ReceiverCreateSettings,
 	_ config.Receiver,
 	nextConsumer consumer.Metrics) (component.MetricsReceiver, error) {
 	return &nopWithEndpointReceiver{
-		Component: componenthelper.New(),
+		Component: mockComponent{},
 		Metrics:   nextConsumer,
 	}, nil
 }

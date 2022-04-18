@@ -17,7 +17,7 @@ package main
 import (
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,6 +26,16 @@ import (
 const (
 	validMetadata = `
 name: metricreceiver
+attributes:
+  cpu_type:
+    value: type
+    description: The type of CPU consumption
+    enum:
+    - user
+    - io_wait
+    - system
+  host:
+    description: The type of CPU consumption
 metrics:
   system.cpu.time:
     enabled: true
@@ -35,7 +45,7 @@ metrics:
     sum:
       aggregation: cumulative
       value_type: double
-    attributes: []
+    attributes: [host, cpu_type]
 `
 )
 
@@ -45,20 +55,23 @@ func Test_runContents(t *testing.T) {
 		useExpGen bool
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    string
-		wantErr string
+		name                  string
+		args                  args
+		expectedDocumentation string
+		want                  string
+		wantErr               string
 	}{
 		{
-			name: "valid metadata",
-			args: args{validMetadata, false},
-			want: "",
+			name:                  "valid metadata",
+			args:                  args{validMetadata, false},
+			expectedDocumentation: "testdata/documentation_v1.md",
+			want:                  "",
 		},
 		{
-			name: "valid metadata v2",
-			args: args{validMetadata, true},
-			want: "",
+			name:                  "valid metadata v2",
+			args:                  args{validMetadata, true},
+			expectedDocumentation: "testdata/documentation_v2.md",
+			want:                  "",
 		},
 		{
 			name:    "invalid yaml",
@@ -75,7 +88,7 @@ func Test_runContents(t *testing.T) {
 				require.NoError(t, os.RemoveAll(tmpdir))
 			})
 
-			metadataFile := path.Join(tmpdir, "metadata.yaml")
+			metadataFile := filepath.Join(tmpdir, "metadata.yaml")
 			require.NoError(t, ioutil.WriteFile(metadataFile, []byte(tt.args.yml), 0600))
 
 			err = run(metadataFile, tt.args.useExpGen)
@@ -85,13 +98,23 @@ func Test_runContents(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 
-				genFilePath := path.Join(tmpdir, "internal/metadata/generated_metrics.go")
+				genFilePath := filepath.Join(tmpdir, "internal/metadata/generated_metrics.go")
 				if tt.args.useExpGen {
-					genFilePath = path.Join(tmpdir, "internal/metadata/generated_metrics_v2.go")
+					genFilePath = filepath.Join(tmpdir, "internal/metadata/generated_metrics_v2.go")
 				}
 				require.FileExists(t, genFilePath)
 
-				require.FileExists(t, path.Join(tmpdir, "documentation.md"))
+				actualDocumentation := filepath.Join(tmpdir, "documentation.md")
+				require.FileExists(t, actualDocumentation)
+				if tt.expectedDocumentation != "" {
+					expectedFileBytes, err := ioutil.ReadFile(tt.expectedDocumentation)
+					require.NoError(t, err)
+
+					actualFileBytes, err := ioutil.ReadFile(actualDocumentation)
+					require.NoError(t, err)
+
+					require.Equal(t, expectedFileBytes, actualFileBytes)
+				}
 			}
 		})
 	}

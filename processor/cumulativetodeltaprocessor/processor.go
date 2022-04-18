@@ -18,7 +18,7 @@ import (
 	"context"
 	"math"
 
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor/internal/tracking"
@@ -48,20 +48,20 @@ func newCumulativeToDeltaProcessor(config *Config, logger *zap.Logger) *cumulati
 }
 
 // processMetrics implements the ProcessMetricsFunc type.
-func (ctdp *cumulativeToDeltaProcessor) processMetrics(_ context.Context, md pdata.Metrics) (pdata.Metrics, error) {
+func (ctdp *cumulativeToDeltaProcessor) processMetrics(_ context.Context, md pmetric.Metrics) (pmetric.Metrics, error) {
 	resourceMetricsSlice := md.ResourceMetrics()
-	resourceMetricsSlice.RemoveIf(func(rm pdata.ResourceMetrics) bool {
-		ilms := rm.InstrumentationLibraryMetrics()
-		ilms.RemoveIf(func(ilm pdata.InstrumentationLibraryMetrics) bool {
+	resourceMetricsSlice.RemoveIf(func(rm pmetric.ResourceMetrics) bool {
+		ilms := rm.ScopeMetrics()
+		ilms.RemoveIf(func(ilm pmetric.ScopeMetrics) bool {
 			ms := ilm.Metrics()
-			ms.RemoveIf(func(m pdata.Metric) bool {
+			ms.RemoveIf(func(m pmetric.Metric) bool {
 				if _, ok := ctdp.metrics[m.Name()]; !ok {
 					return false
 				}
 				switch m.DataType() {
-				case pdata.MetricDataTypeSum:
+				case pmetric.MetricDataTypeSum:
 					ms := m.Sum()
-					if ms.AggregationTemporality() != pdata.MetricAggregationTemporalityCumulative {
+					if ms.AggregationTemporality() != pmetric.MetricAggregationTemporalityCumulative {
 						return false
 					}
 
@@ -72,14 +72,14 @@ func (ctdp *cumulativeToDeltaProcessor) processMetrics(_ context.Context, md pda
 
 					baseIdentity := tracking.MetricIdentity{
 						Resource:               rm.Resource(),
-						InstrumentationLibrary: ilm.InstrumentationLibrary(),
+						InstrumentationLibrary: ilm.Scope(),
 						MetricDataType:         m.DataType(),
 						MetricName:             m.Name(),
 						MetricUnit:             m.Unit(),
 						MetricIsMonotonic:      ms.IsMonotonic(),
 					}
 					ctdp.convertDataPoints(ms.DataPoints(), baseIdentity)
-					ms.SetAggregationTemporality(pdata.MetricAggregationTemporalityDelta)
+					ms.SetAggregationTemporality(pmetric.MetricAggregationTemporalityDelta)
 					return ms.DataPoints().Len() == 0
 				default:
 					return false
@@ -87,7 +87,7 @@ func (ctdp *cumulativeToDeltaProcessor) processMetrics(_ context.Context, md pda
 			})
 			return ilm.Metrics().Len() == 0
 		})
-		return rm.InstrumentationLibraryMetrics().Len() == 0
+		return rm.ScopeMetrics().Len() == 0
 	})
 	return md, nil
 }
@@ -99,12 +99,12 @@ func (ctdp *cumulativeToDeltaProcessor) shutdown(context.Context) error {
 
 func (ctdp *cumulativeToDeltaProcessor) convertDataPoints(in interface{}, baseIdentity tracking.MetricIdentity) {
 	switch dps := in.(type) {
-	case pdata.NumberDataPointSlice:
-		dps.RemoveIf(func(dp pdata.NumberDataPoint) bool {
+	case pmetric.NumberDataPointSlice:
+		dps.RemoveIf(func(dp pmetric.NumberDataPoint) bool {
 			id := baseIdentity
 			id.StartTimestamp = dp.StartTimestamp()
 			id.Attributes = dp.Attributes()
-			id.MetricValueType = dp.Type()
+			id.MetricValueType = dp.ValueType()
 			point := tracking.ValuePoint{
 				ObservedTimestamp: dp.Timestamp(),
 			}

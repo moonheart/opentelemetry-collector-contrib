@@ -2,10 +2,10 @@
   "resourceMetrics": [
     {
       "resource": {},
-      "instrumentationLibraryMetrics": [
+      "scopeMetrics": [
         {
-          "instrumentationLibrary": {
-            "name": "otel/apache"
+          "scope": {
+            "name": "otelcol/apachereceiver"
           },
           "metrics": [
             {

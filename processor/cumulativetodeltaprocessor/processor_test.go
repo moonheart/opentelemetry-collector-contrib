@@ -26,7 +26,8 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
 
@@ -39,8 +40,8 @@ type testMetric struct {
 type cumulativeToDeltaTest struct {
 	name       string
 	metrics    []string
-	inMetrics  pdata.Metrics
-	outMetrics pdata.Metrics
+	inMetrics  pmetric.Metrics
+	outMetrics pmetric.Metrics
 }
 
 var (
@@ -121,8 +122,8 @@ func TestCumulativeToDeltaProcessor(t *testing.T) {
 			require.Equal(t, 1, len(got))
 			require.Equal(t, test.outMetrics.ResourceMetrics().Len(), got[0].ResourceMetrics().Len())
 
-			expectedMetrics := test.outMetrics.ResourceMetrics().At(0).InstrumentationLibraryMetrics().At(0).Metrics()
-			actualMetrics := got[0].ResourceMetrics().At(0).InstrumentationLibraryMetrics().At(0).Metrics()
+			expectedMetrics := test.outMetrics.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
+			actualMetrics := got[0].ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
 
 			require.Equal(t, expectedMetrics.Len(), actualMetrics.Len())
 
@@ -132,7 +133,7 @@ func TestCumulativeToDeltaProcessor(t *testing.T) {
 
 				require.Equal(t, eM.Name(), aM.Name())
 
-				if eM.DataType() == pdata.MetricDataTypeGauge {
+				if eM.DataType() == pmetric.MetricDataTypeGauge {
 					eDataPoints := eM.Gauge().DataPoints()
 					aDataPoints := aM.Gauge().DataPoints()
 					require.Equal(t, eDataPoints.Len(), aDataPoints.Len())
@@ -142,7 +143,7 @@ func TestCumulativeToDeltaProcessor(t *testing.T) {
 					}
 				}
 
-				if eM.DataType() == pdata.MetricDataTypeSum {
+				if eM.DataType() == pmetric.MetricDataTypeSum {
 					eDataPoints := eM.Sum().DataPoints()
 					aDataPoints := aM.Sum().DataPoints()
 
@@ -165,29 +166,29 @@ func TestCumulativeToDeltaProcessor(t *testing.T) {
 	}
 }
 
-func generateTestMetrics(tm testMetric) pdata.Metrics {
-	md := pdata.NewMetrics()
+func generateTestMetrics(tm testMetric) pmetric.Metrics {
+	md := pmetric.NewMetrics()
 	now := time.Now()
 
 	rm := md.ResourceMetrics().AppendEmpty()
-	ms := rm.InstrumentationLibraryMetrics().AppendEmpty().Metrics()
+	ms := rm.ScopeMetrics().AppendEmpty().Metrics()
 	for i, name := range tm.metricNames {
 		m := ms.AppendEmpty()
 		m.SetName(name)
-		m.SetDataType(pdata.MetricDataTypeSum)
+		m.SetDataType(pmetric.MetricDataTypeSum)
 
 		sum := m.Sum()
 		sum.SetIsMonotonic(true)
 
 		if tm.isCumulative[i] {
-			sum.SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+			sum.SetAggregationTemporality(pmetric.MetricAggregationTemporalityCumulative)
 		} else {
-			sum.SetAggregationTemporality(pdata.MetricAggregationTemporalityDelta)
+			sum.SetAggregationTemporality(pmetric.MetricAggregationTemporalityDelta)
 		}
 
 		for _, value := range tm.metricValues[i] {
 			dp := m.Sum().DataPoints().AppendEmpty()
-			dp.SetTimestamp(pdata.NewTimestampFromTime(now.Add(10 * time.Second)))
+			dp.SetTimestamp(pcommon.NewTimestampFromTime(now.Add(10 * time.Second)))
 			dp.SetDoubleVal(value)
 		}
 	}
@@ -210,21 +211,21 @@ func BenchmarkConsumeMetrics(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	metrics := pdata.NewMetrics()
+	metrics := pmetric.NewMetrics()
 	rms := metrics.ResourceMetrics().AppendEmpty()
 	r := rms.Resource()
-	r.Attributes().Insert("resource", pdata.NewAttributeValueBool(true))
-	ilms := rms.InstrumentationLibraryMetrics().AppendEmpty()
-	ilms.InstrumentationLibrary().SetName("test")
-	ilms.InstrumentationLibrary().SetVersion("0.1")
+	r.Attributes().Insert("resource", pcommon.NewValueBool(true))
+	ilms := rms.ScopeMetrics().AppendEmpty()
+	ilms.Scope().SetName("test")
+	ilms.Scope().SetVersion("0.1")
 	m := ilms.Metrics().AppendEmpty()
-	m.SetDataType(pdata.MetricDataTypeSum)
+	m.SetDataType(pmetric.MetricDataTypeSum)
 	m.Sum().SetIsMonotonic(true)
 	dp := m.Sum().DataPoints().AppendEmpty()
-	dp.Attributes().Insert("tag", pdata.NewAttributeValueString("value"))
+	dp.Attributes().Insert("tag", pcommon.NewValueString("value"))
 
 	reset := func() {
-		m.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+		m.Sum().SetAggregationTemporality(pmetric.MetricAggregationTemporalityCumulative)
 		dp.SetDoubleVal(100.0)
 	}
 

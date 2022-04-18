@@ -19,7 +19,8 @@ import (
 	"strconv"
 	"time"
 
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
 	"go.uber.org/zap"
 
@@ -30,6 +31,7 @@ type postgreSQLScraper struct {
 	logger        *zap.Logger
 	config        *Config
 	clientFactory postgreSQLClientFactory
+	mb            *metadata.MetricsBuilder
 }
 
 type postgreSQLClientFactory interface {
@@ -57,50 +59,17 @@ func newPostgreSQLScraper(
 		logger:        logger,
 		config:        config,
 		clientFactory: clientFactory,
-	}
-}
-
-// initMetric initializes a metric with a metadata attribute.
-func initMetric(ms pdata.MetricSlice, mi metadata.MetricIntf) pdata.Metric {
-	m := ms.AppendEmpty()
-	mi.Init(m)
-	return m
-}
-
-// addToIntMetric adds and attributes a int sum datapoint to metricslice.
-func addToIntMetric(metric pdata.NumberDataPointSlice, attributes pdata.AttributeMap, value int64, ts pdata.Timestamp) {
-	dataPoint := metric.AppendEmpty()
-	dataPoint.SetTimestamp(ts)
-	dataPoint.SetIntVal(value)
-	if attributes.Len() > 0 {
-		attributes.CopyTo(dataPoint.Attributes())
+		mb:            metadata.NewMetricsBuilder(config.Metrics),
 	}
 }
 
 // scrape scrapes the metric stats, transforms them and attributes them into a metric slices.
-func (p *postgreSQLScraper) scrape(ctx context.Context) (pdata.Metrics, error) {
-	// metric initialization
-	md := pdata.NewMetrics()
-	ilm := md.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
-	ilm.InstrumentationLibrary().SetName("otelcol/postgresql")
-	now := pdata.NewTimestampFromTime(time.Now())
-
-	blocksRead := initMetric(ilm.Metrics(), metadata.M.PostgresqlBlocksRead).Sum().DataPoints()
-	commits := initMetric(ilm.Metrics(), metadata.M.PostgresqlCommits).Sum().DataPoints()
-	databaseSize := initMetric(ilm.Metrics(), metadata.M.PostgresqlDbSize).Sum().DataPoints()
-	backends := initMetric(ilm.Metrics(), metadata.M.PostgresqlBackends).Sum().DataPoints()
-	databaseRows := initMetric(ilm.Metrics(), metadata.M.PostgresqlRows).Sum().DataPoints()
-	operations := initMetric(ilm.Metrics(), metadata.M.PostgresqlOperations).Sum().DataPoints()
-	rollbacks := initMetric(ilm.Metrics(), metadata.M.PostgresqlRollbacks).Sum().DataPoints()
-
-	var errors scrapererror.ScrapeErrors
-
+func (p *postgreSQLScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	databases := p.config.Databases
 	listClient, err := p.clientFactory.getClient(p.config, "")
 	if err != nil {
 		p.logger.Error("Failed to initialize connection to postgres", zap.Error(err))
-		errors.Add(err)
-		return md, errors.Combine()
+		return pmetric.NewMetrics(), err
 	}
 	defer listClient.Close()
 
@@ -108,16 +77,18 @@ func (p *postgreSQLScraper) scrape(ctx context.Context) (pdata.Metrics, error) {
 		dbList, err := listClient.listDatabases(ctx)
 		if err != nil {
 			p.logger.Error("Failed to request list of databases from postgres", zap.Error(err))
-			errors.Add(err)
-			return md, errors.Combine()
+			return pmetric.NewMetrics(), err
 		}
-
 		databases = dbList
 	}
 
-	p.collectCommitsAndRollbacks(ctx, now, listClient, databases, commits, rollbacks, errors)
-	p.collectDatabaseSize(ctx, now, listClient, databases, databaseSize, errors)
-	p.collectBackends(ctx, now, listClient, databases, backends, errors)
+	now := pcommon.NewTimestampFromTime(time.Now())
+
+	var errors scrapererror.ScrapeErrors
+
+	p.collectCommitsAndRollbacks(ctx, now, listClient, databases, errors)
+	p.collectDatabaseSize(ctx, now, listClient, databases, errors)
+	p.collectBackends(ctx, now, listClient, databases, errors)
 
 	for _, database := range databases {
 		dbClient, err := p.clientFactory.getClient(p.config, database)
@@ -128,18 +99,17 @@ func (p *postgreSQLScraper) scrape(ctx context.Context) (pdata.Metrics, error) {
 		}
 		defer dbClient.Close()
 
-		p.collectBlockReads(ctx, now, dbClient, blocksRead, errors)
-		p.collectDatabaseTableMetrics(ctx, now, dbClient, databaseRows, operations, errors)
+		p.collectBlockReads(ctx, now, dbClient, errors)
+		p.collectDatabaseTableMetrics(ctx, now, dbClient, errors)
 	}
 
-	return md, errors.Combine()
+	return p.mb.Emit(), errors.Combine()
 }
 
 func (p *postgreSQLScraper) collectBlockReads(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	client client,
-	blocksRead pdata.NumberDataPointSlice,
 	errors scrapererror.ScrapeErrors,
 ) {
 	blocksReadByTableMetrics, err := client.getBlocksReadByTable(ctx)
@@ -159,22 +129,15 @@ func (p *postgreSQLScraper) collectBlockReads(
 				errors.AddPartial(0, err)
 				continue
 			}
-
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(table.database))
-			attributes.Insert(metadata.A.Table, pdata.NewAttributeValueString(table.table))
-			attributes.Insert(metadata.A.Source, pdata.NewAttributeValueString(k))
-			addToIntMetric(blocksRead, attributes, i, now)
+			p.mb.RecordPostgresqlBlocksReadDataPoint(now, i, table.database, table.table, k)
 		}
 	}
 }
 
 func (p *postgreSQLScraper) collectDatabaseTableMetrics(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	client client,
-	databaseRows pdata.NumberDataPointSlice,
-	operations pdata.NumberDataPointSlice,
 	errors scrapererror.ScrapeErrors,
 ) {
 	databaseTableMetrics, err := client.getDatabaseTableMetrics(ctx)
@@ -199,12 +162,7 @@ func (p *postgreSQLScraper) collectDatabaseTableMetrics(
 				errors.AddPartial(0, err)
 				continue
 			}
-
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(table.database))
-			attributes.Insert(metadata.A.Table, pdata.NewAttributeValueString(table.table))
-			attributes.Insert(metadata.A.State, pdata.NewAttributeValueString(key))
-			addToIntMetric(databaseRows, attributes, i, now)
+			p.mb.RecordPostgresqlRowsDataPoint(now, i, table.database, table.table, key)
 		}
 
 		for _, key := range []string{"ins", "upd", "del", "hot_upd"} {
@@ -218,23 +176,16 @@ func (p *postgreSQLScraper) collectDatabaseTableMetrics(
 				errors.AddPartial(0, err)
 				continue
 			}
-
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(table.database))
-			attributes.Insert(metadata.A.Table, pdata.NewAttributeValueString(table.table))
-			attributes.Insert(metadata.A.Operation, pdata.NewAttributeValueString(key))
-			addToIntMetric(operations, attributes, i, now)
+			p.mb.RecordPostgresqlOperationsDataPoint(now, i, table.database, table.table, key)
 		}
 	}
 }
 
 func (p *postgreSQLScraper) collectCommitsAndRollbacks(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	client client,
 	databases []string,
-	commits pdata.NumberDataPointSlice,
-	rollbacks pdata.NumberDataPointSlice,
 	errors scrapererror.ScrapeErrors,
 ) {
 	xactMetrics, err := client.getCommitsAndRollbacks(ctx, databases)
@@ -253,9 +204,7 @@ func (p *postgreSQLScraper) collectCommitsAndRollbacks(
 			errors.AddPartial(0, err)
 			continue
 		} else {
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(metric.database))
-			addToIntMetric(commits, attributes, i, now)
+			p.mb.RecordPostgresqlCommitsDataPoint(now, i, metric.database)
 		}
 
 		rollbackValue := metric.stats["xact_rollback"]
@@ -263,19 +212,16 @@ func (p *postgreSQLScraper) collectCommitsAndRollbacks(
 			errors.AddPartial(0, err)
 			continue
 		} else {
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(metric.database))
-			addToIntMetric(rollbacks, attributes, i, now)
+			p.mb.RecordPostgresqlRollbacksDataPoint(now, i, metric.database)
 		}
 	}
 }
 
 func (p *postgreSQLScraper) collectDatabaseSize(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	client client,
 	databases []string,
-	databaseSize pdata.NumberDataPointSlice,
 	errors scrapererror.ScrapeErrors,
 ) {
 	databaseSizeMetric, err := client.getDatabaseSize(ctx, databases)
@@ -295,20 +241,16 @@ func (p *postgreSQLScraper) collectDatabaseSize(
 				errors.AddPartial(0, err)
 				continue
 			}
-
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(metric.database))
-			addToIntMetric(databaseSize, attributes, i, now)
+			p.mb.RecordPostgresqlDbSizeDataPoint(now, i, metric.database)
 		}
 	}
 }
 
 func (p *postgreSQLScraper) collectBackends(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	client client,
 	databases []string,
-	backends pdata.NumberDataPointSlice,
 	errors scrapererror.ScrapeErrors,
 ) {
 	backendsMetric, err := client.getBackends(ctx, databases)
@@ -328,10 +270,7 @@ func (p *postgreSQLScraper) collectBackends(
 				errors.AddPartial(0, err)
 				continue
 			}
-
-			attributes := pdata.NewAttributeMap()
-			attributes.Insert(metadata.A.Database, pdata.NewAttributeValueString(metric.database))
-			addToIntMetric(backends, attributes, i, now)
+			p.mb.RecordPostgresqlBackendsDataPoint(now, i, metric.database)
 		}
 	}
 }

@@ -23,7 +23,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +42,7 @@ type componentFactory func(ctx context.Context, endpoint string) (component.Expo
 
 type loadBalancer interface {
 	component.Component
-	Endpoint(traceID pdata.TraceID) string
+	Endpoint(traceID pcommon.TraceID) string
 	Exporter(endpoint string) (component.Exporter, error)
 }
 
@@ -173,7 +173,7 @@ func (lb *loadBalancerImp) Shutdown(context.Context) error {
 	return nil
 }
 
-func (lb *loadBalancerImp) Endpoint(traceID pdata.TraceID) string {
+func (lb *loadBalancerImp) Endpoint(traceID pcommon.TraceID) string {
 	lb.updateLock.RLock()
 	defer lb.updateLock.RUnlock()
 
@@ -181,7 +181,7 @@ func (lb *loadBalancerImp) Endpoint(traceID pdata.TraceID) string {
 }
 
 func (lb *loadBalancerImp) Exporter(endpoint string) (component.Exporter, error) {
-	// NOTE: make rolling updates of next tier of collectors work. currently this may cause
+	// NOTE: make rolling updates of next tier of collectors work. currently, this may cause
 	// data loss because the latest batches sent to outdated backend will never find their way out.
 	// for details: https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/1690
 	lb.updateLock.RLock()
