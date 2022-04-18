@@ -23,60 +23,81 @@ import (
 
 	datadogpb "github.com/DataDog/datadog-agent/pkg/trace/exportable/pb"
 	"github.com/tinylib/msgp/msgp"
-	"go.opentelemetry.io/collector/model/pdata"
 	semconv "go.opentelemetry.io/collector/model/semconv/v1.6.1"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
-func toTraces(traces datadogpb.Traces, req *http.Request) pdata.Traces {
-	dest := pdata.NewTraces()
-	resSpans := dest.ResourceSpans().AppendEmpty()
-	resSpans.SetSchemaUrl(semconv.SchemaURL)
+func toTraces(traces datadogpb.Traces, req *http.Request) ptrace.Traces {
+	dest := ptrace.NewTraces()
 
-	for _, trace := range traces {
-		ils := resSpans.InstrumentationLibrarySpans().AppendEmpty()
-		ils.InstrumentationLibrary().SetName("Datadog-" + req.Header.Get("Datadog-Meta-Lang"))
-		ils.InstrumentationLibrary().SetVersion(req.Header.Get("Datadog-Meta-Tracer-Version"))
-		spans := pdata.NewSpanSlice()
-		spans.EnsureCapacity(len(trace))
-		for _, span := range trace {
-			newSpan := spans.AppendEmpty()
+	for _, trace1 := range traces {
+		groupByServiceName := traceGroupByServiceName(trace1)
+		for serviceName, trace := range groupByServiceName {
+			resSpans := dest.ResourceSpans().AppendEmpty()
+			resSpans.SetSchemaUrl(semconv.SchemaURL)
+			resSpans.Resource().Attributes().InsertString(semconv.AttributeServiceName, serviceName)
 
-			newSpan.SetTraceID(uInt64ToTraceID(0, span.TraceID))
-			newSpan.SetSpanID(uInt64ToSpanID(span.SpanID))
-			newSpan.SetStartTimestamp(pdata.Timestamp(span.Start))
-			newSpan.SetEndTimestamp(pdata.Timestamp(span.Start + span.Duration))
-			newSpan.SetParentSpanID(uInt64ToSpanID(span.ParentID))
-			newSpan.SetName(span.Name)
+			ils := resSpans.ScopeSpans().AppendEmpty()
+			ils.Scope().SetName("Datadog-" + req.Header.Get("Datadog-Meta-Lang"))
+			ils.Scope().SetVersion(req.Header.Get("Datadog-Meta-Tracer-Version"))
+			spans := ptrace.NewSpanSlice()
+			spans.EnsureCapacity(len(*trace))
+			for _, span := range *trace {
+				newSpan := spans.AppendEmpty()
 
-			if span.Error > 0 {
-				newSpan.Status().SetCode(pdata.StatusCodeError)
-			} else {
-				newSpan.Status().SetCode(pdata.StatusCodeOk)
-			}
+				newSpan.SetTraceID(uInt64ToTraceID(0, span.TraceID))
+				newSpan.SetSpanID(uInt64ToSpanID(span.SpanID))
+				newSpan.SetStartTimestamp(pcommon.Timestamp(span.Start))
+				newSpan.SetEndTimestamp(pcommon.Timestamp(span.Start + span.Duration))
+				newSpan.SetParentSpanID(uInt64ToSpanID(span.ParentID))
+				newSpan.SetName(span.Resource)
 
-			attrs := newSpan.Attributes()
-			attrs.EnsureCapacity(len(span.GetMeta()) + 1)
-			attrs.InsertString(semconv.AttributeServiceName, span.Service)
-			for k, v := range span.GetMeta() {
-				k = translateDataDogKeyToOtel(k)
-				if len(k) > 0 {
-					attrs.InsertString(k, v)
+				if span.Error > 0 {
+					newSpan.Status().SetCode(ptrace.StatusCodeError)
+				} else {
+					newSpan.Status().SetCode(ptrace.StatusCodeOk)
+				}
+
+				attrs := newSpan.Attributes()
+				attrs.EnsureCapacity(len(span.GetMeta()) + 1)
+				attrs.InsertString(semconv.AttributeServiceName, span.Service)
+				for k, v := range span.GetMeta() {
+					k = translateDataDogKeyToOtel(k)
+					if len(k) > 0 {
+						attrs.InsertString(k, v)
+					}
+				}
+
+				switch span.Type {
+				case "web":
+					newSpan.SetKind(ptrace.SpanKindServer)
+				case "custom":
+					newSpan.SetKind(ptrace.SpanKindUnspecified)
+				default:
+					newSpan.SetKind(ptrace.SpanKindClient)
 				}
 			}
+			spans.MoveAndAppendTo(ils.Spans())
 
-			switch span.Type {
-			case "web":
-				newSpan.SetKind(pdata.SpanKindServer)
-			case "custom":
-				newSpan.SetKind(pdata.SpanKindUnspecified)
-			default:
-				newSpan.SetKind(pdata.SpanKindClient)
-			}
 		}
-		spans.MoveAndAppendTo(ils.Spans())
 	}
 
 	return dest
+}
+
+func traceGroupByServiceName(trace datadogpb.Trace) map[string]*datadogpb.Trace {
+	grouped := make(map[string]*datadogpb.Trace)
+
+	for _, span := range trace {
+		t, found := grouped[span.Service]
+		if !found {
+			t = &datadogpb.Trace{}
+			grouped[span.Service] = t
+		}
+		*t = append(*t, span)
+	}
+	return grouped
 }
 
 func translateDataDogKeyToOtel(k string) string {
@@ -131,15 +152,15 @@ func getMediaType(req *http.Request) string {
 	return mt
 }
 
-func uInt64ToTraceID(high, low uint64) pdata.TraceID {
+func uInt64ToTraceID(high, low uint64) pcommon.TraceID {
 	traceID := [16]byte{}
 	binary.BigEndian.PutUint64(traceID[:8], high)
 	binary.BigEndian.PutUint64(traceID[8:], low)
-	return pdata.NewTraceID(traceID)
+	return pcommon.NewTraceID(traceID)
 }
 
-func uInt64ToSpanID(id uint64) pdata.SpanID {
+func uInt64ToSpanID(id uint64) pcommon.SpanID {
 	spanID := [8]byte{}
 	binary.BigEndian.PutUint64(spanID[:], id)
-	return pdata.NewSpanID(spanID)
+	return pcommon.NewSpanID(spanID)
 }

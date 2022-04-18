@@ -102,6 +102,6 @@ func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Reques
 	if err != nil {
 		http.Error(w, "Trace consumer errored out", http.StatusInternalServerError)
 	} else {
-		_, _ = w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("{}"))
 	}
 }
