@@ -14,13 +14,13 @@ require (
 
 require (
 	google.golang.org/genproto v0.0.0-20220324131243-acbaeb5b85eb
-	google.golang.org/grpc v1.45.0
+	google.golang.org/grpc v1.46.0
 )
 
 require (
 	github.com/ReneKroon/ttlcache/v2 v2.11.0
 	github.com/mitchellh/hashstructure v1.1.0
-	go.opentelemetry.io/collector/pdata v0.49.0
+	go.opentelemetry.io/collector/pdata v0.50.0
 )
 
 require (
@@ -32,7 +32,7 @@ require (
 	github.com/cncf/udpa/go v0.0.0-20210930031921-04548b0d99d4 // indirect
 	github.com/cncf/xds/go v0.0.0-20211130200136-a8f946100490 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/envoyproxy/go-control-plane v0.10.1 // indirect
+	github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1 // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.6.2 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
