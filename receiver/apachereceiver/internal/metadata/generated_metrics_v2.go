@@ -3,6 +3,8 @@
 package metadata
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -45,6 +47,98 @@ func DefaultMetricsSettings() MetricsSettings {
 			Enabled: true,
 		},
 	}
+}
+
+// AttributeScoreboardState specifies the a value scoreboard_state attribute.
+type AttributeScoreboardState int
+
+const (
+	_ AttributeScoreboardState = iota
+	AttributeScoreboardStateOpen
+	AttributeScoreboardStateWaiting
+	AttributeScoreboardStateStarting
+	AttributeScoreboardStateReading
+	AttributeScoreboardStateSending
+	AttributeScoreboardStateKeepalive
+	AttributeScoreboardStateDnslookup
+	AttributeScoreboardStateClosing
+	AttributeScoreboardStateLogging
+	AttributeScoreboardStateFinishing
+	AttributeScoreboardStateIdleCleanup
+	AttributeScoreboardStateUnknown
+)
+
+// String returns the string representation of the AttributeScoreboardState.
+func (av AttributeScoreboardState) String() string {
+	switch av {
+	case AttributeScoreboardStateOpen:
+		return "open"
+	case AttributeScoreboardStateWaiting:
+		return "waiting"
+	case AttributeScoreboardStateStarting:
+		return "starting"
+	case AttributeScoreboardStateReading:
+		return "reading"
+	case AttributeScoreboardStateSending:
+		return "sending"
+	case AttributeScoreboardStateKeepalive:
+		return "keepalive"
+	case AttributeScoreboardStateDnslookup:
+		return "dnslookup"
+	case AttributeScoreboardStateClosing:
+		return "closing"
+	case AttributeScoreboardStateLogging:
+		return "logging"
+	case AttributeScoreboardStateFinishing:
+		return "finishing"
+	case AttributeScoreboardStateIdleCleanup:
+		return "idle_cleanup"
+	case AttributeScoreboardStateUnknown:
+		return "unknown"
+	}
+	return ""
+}
+
+// MapAttributeScoreboardState is a helper map of string to AttributeScoreboardState attribute value.
+var MapAttributeScoreboardState = map[string]AttributeScoreboardState{
+	"open":         AttributeScoreboardStateOpen,
+	"waiting":      AttributeScoreboardStateWaiting,
+	"starting":     AttributeScoreboardStateStarting,
+	"reading":      AttributeScoreboardStateReading,
+	"sending":      AttributeScoreboardStateSending,
+	"keepalive":    AttributeScoreboardStateKeepalive,
+	"dnslookup":    AttributeScoreboardStateDnslookup,
+	"closing":      AttributeScoreboardStateClosing,
+	"logging":      AttributeScoreboardStateLogging,
+	"finishing":    AttributeScoreboardStateFinishing,
+	"idle_cleanup": AttributeScoreboardStateIdleCleanup,
+	"unknown":      AttributeScoreboardStateUnknown,
+}
+
+// AttributeWorkersState specifies the a value workers_state attribute.
+type AttributeWorkersState int
+
+const (
+	_ AttributeWorkersState = iota
+	AttributeWorkersStateBusy
+	AttributeWorkersStateIdle
+)
+
+// String returns the string representation of the AttributeWorkersState.
+func (av AttributeWorkersState) String() string {
+	switch av {
+	case AttributeWorkersStateBusy:
+		return "busy"
+	case AttributeWorkersStateIdle:
+		return "idle"
+	}
+	return ""
+}
+
+// MapAttributeWorkersState is a helper map of string to AttributeWorkersState attribute value.
+var MapAttributeWorkersState = map[string]AttributeWorkersState{
+	"busy": AttributeWorkersStateBusy,
+	"idle": AttributeWorkersStateIdle,
 }
 
 type metricApacheCurrentConnections struct {
@@ -458,18 +552,28 @@ func (mb *MetricsBuilder) Emit(ro ...ResourceOption) pmetric.Metrics {
 }
 
 // RecordApacheCurrentConnectionsDataPoint adds a data point to apache.current_connections metric.
-func (mb *MetricsBuilder) RecordApacheCurrentConnectionsDataPoint(ts pcommon.Timestamp, val int64, serverNameAttributeValue string) {
-	mb.metricApacheCurrentConnections.recordDataPoint(mb.startTime, ts, val, serverNameAttributeValue)
+func (mb *MetricsBuilder) RecordApacheCurrentConnectionsDataPoint(ts pcommon.Timestamp, val string, serverNameAttributeValue string) error {
+	if i, err := strconv.ParseInt(val, 10, 64); err != nil {
+		return fmt.Errorf("failed to parse int for ApacheCurrentConnections, value was %s: %w", val, err)
+	} else {
+		mb.metricApacheCurrentConnections.recordDataPoint(mb.startTime, ts, i, serverNameAttributeValue)
+	}
+	return nil
 }
 
 // RecordApacheRequestsDataPoint adds a data point to apache.requests metric.
-func (mb *MetricsBuilder) RecordApacheRequestsDataPoint(ts pcommon.Timestamp, val int64, serverNameAttributeValue string) {
-	mb.metricApacheRequests.recordDataPoint(mb.startTime, ts, val, serverNameAttributeValue)
+func (mb *MetricsBuilder) RecordApacheRequestsDataPoint(ts pcommon.Timestamp, val string, serverNameAttributeValue string) error {
+	if i, err := strconv.ParseInt(val, 10, 64); err != nil {
+		return fmt.Errorf("failed to parse int for ApacheRequests, value was %s: %w", val, err)
+	} else {
+		mb.metricApacheRequests.recordDataPoint(mb.startTime, ts, i, serverNameAttributeValue)
+	}
+	return nil
 }
 
 // RecordApacheScoreboardDataPoint adds a data point to apache.scoreboard metric.
-func (mb *MetricsBuilder) RecordApacheScoreboardDataPoint(ts pcommon.Timestamp, val int64, serverNameAttributeValue string, scoreboardStateAttributeValue string) {
-	mb.metricApacheScoreboard.recordDataPoint(mb.startTime, ts, val, serverNameAttributeValue, scoreboardStateAttributeValue)
+func (mb *MetricsBuilder) RecordApacheScoreboardDataPoint(ts pcommon.Timestamp, val int64, serverNameAttributeValue string, scoreboardStateAttributeValue AttributeScoreboardState) {
+	mb.metricApacheScoreboard.recordDataPoint(mb.startTime, ts, val, serverNameAttributeValue, scoreboardStateAttributeValue.String())
 }
 
 // RecordApacheTrafficDataPoint adds a data point to apache.traffic metric.
@@ -478,13 +582,23 @@ func (mb *MetricsBuilder) RecordApacheTrafficDataPoint(ts pcommon.Timestamp, val
 }
 
 // RecordApacheUptimeDataPoint adds a data point to apache.uptime metric.
-func (mb *MetricsBuilder) RecordApacheUptimeDataPoint(ts pcommon.Timestamp, val int64, serverNameAttributeValue string) {
-	mb.metricApacheUptime.recordDataPoint(mb.startTime, ts, val, serverNameAttributeValue)
+func (mb *MetricsBuilder) RecordApacheUptimeDataPoint(ts pcommon.Timestamp, val string, serverNameAttributeValue string) error {
+	if i, err := strconv.ParseInt(val, 10, 64); err != nil {
+		return fmt.Errorf("failed to parse int for ApacheUptime, value was %s: %w", val, err)
+	} else {
+		mb.metricApacheUptime.recordDataPoint(mb.startTime, ts, i, serverNameAttributeValue)
+	}
+	return nil
 }
 
 // RecordApacheWorkersDataPoint adds a data point to apache.workers metric.
-func (mb *MetricsBuilder) RecordApacheWorkersDataPoint(ts pcommon.Timestamp, val int64, serverNameAttributeValue string, workersStateAttributeValue string) {
-	mb.metricApacheWorkers.recordDataPoint(mb.startTime, ts, val, serverNameAttributeValue, workersStateAttributeValue)
+func (mb *MetricsBuilder) RecordApacheWorkersDataPoint(ts pcommon.Timestamp, val string, serverNameAttributeValue string, workersStateAttributeValue AttributeWorkersState) error {
+	if i, err := strconv.ParseInt(val, 10, 64); err != nil {
+		return fmt.Errorf("failed to parse int for ApacheWorkers, value was %s: %w", val, err)
+	} else {
+		mb.metricApacheWorkers.recordDataPoint(mb.startTime, ts, i, serverNameAttributeValue, workersStateAttributeValue.String())
+	}
+	return nil
 }
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
@@ -512,39 +626,3 @@ var Attributes = struct {
 
 // A is an alias for Attributes.
 var A = Attributes
-
-// AttributeScoreboardState are the possible values that the attribute "scoreboard_state" can have.
-var AttributeScoreboardState = struct {
-	Open        string
-	Waiting     string
-	Starting    string
-	Reading     string
-	Sending     string
-	Keepalive   string
-	Dnslookup   string
-	Closing     string
-	Logging     string
-	Finishing   string
-	IdleCleanup string
-}{
-	"open",
-	"waiting",
-	"starting",
-	"reading",
-	"sending",
-	"keepalive",
-	"dnslookup",
-	"closing",
-	"logging",
-	"finishing",
-	"idle_cleanup",
-}
-
-// AttributeWorkersState are the possible values that the attribute "workers_state" can have.
-var AttributeWorkersState = struct {
-	Busy string
-	Idle string
-}{
-	"busy",
-	"idle",
-}

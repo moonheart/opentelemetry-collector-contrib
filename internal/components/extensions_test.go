@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:errcheck
 package components
 
 import (
@@ -92,7 +93,7 @@ func TestDefaultExtensions(t *testing.T) {
 				cfg := extFactories["basicauth"].CreateDefaultConfig().(*basicauthextension.Config)
 				f := testutil.NewTemporaryFile(t)
 				f.WriteString("username:password")
-				cfg.Htpasswd = basicauthextension.HtpasswdSettings{
+				cfg.Htpasswd = &basicauthextension.HtpasswdSettings{
 					File:   f.Name(),
 					Inline: "username:password",
 				}
