@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
@@ -49,7 +49,7 @@ func TestExporterTraceDataCallbackSingleSpan(t *testing.T) {
 
 	// re-use some test generation method(s) from trace_to_envelope_test
 	resource := getResource()
-	instrumentationLibrary := getInstrumentationLibrary()
+	scope := getScope()
 	span := getDefaultHTTPServerSpan()
 
 	traces := ptrace.NewTraces()
@@ -57,7 +57,7 @@ func TestExporterTraceDataCallbackSingleSpan(t *testing.T) {
 	r := rs.Resource()
 	resource.CopyTo(r)
 	ilss := rs.ScopeSpans().AppendEmpty()
-	instrumentationLibrary.CopyTo(ilss.Scope())
+	scope.CopyTo(ilss.Scope())
 	span.CopyTo(ilss.Spans().AppendEmpty())
 
 	assert.NoError(t, exporter.onTraceData(context.Background(), traces))
@@ -72,7 +72,7 @@ func TestExporterTraceDataCallbackSingleSpanNoEnvelope(t *testing.T) {
 
 	// re-use some test generation method(s) from trace_to_envelope_test
 	resource := getResource()
-	instrumentationLibrary := getInstrumentationLibrary()
+	scope := getScope()
 	span := getDefaultInternalSpan()
 
 	// Make this a FaaS span, which will trigger an error, because conversion
@@ -84,7 +84,7 @@ func TestExporterTraceDataCallbackSingleSpanNoEnvelope(t *testing.T) {
 	r := rs.Resource()
 	resource.CopyTo(r)
 	ilss := rs.ScopeSpans().AppendEmpty()
-	instrumentationLibrary.CopyTo(ilss.Scope())
+	scope.CopyTo(ilss.Scope())
 	span.CopyTo(ilss.Spans().AppendEmpty())
 
 	err := exporter.onTraceData(context.Background(), traces)

@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componenterror"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/obsreport"
@@ -48,8 +47,6 @@ var errNextConsumerRespBody = []byte(`"Internal Server Error"`)
 
 // zipkinReceiver type is used to handle spans received in the Zipkin format.
 type zipkinReceiver struct {
-	// addr is the address onto which the HTTP server will be bound
-	host         component.Host
 	nextConsumer consumer.Traces
 	id           config.ComponentID
 
@@ -68,10 +65,10 @@ type zipkinReceiver struct {
 
 var _ http.Handler = (*zipkinReceiver)(nil)
 
-// newReceiver creates a new zipkinreceiver.zipkinReceiver reference.
+// newReceiver creates a new zipkinReceiver reference.
 func newReceiver(config *Config, nextConsumer consumer.Traces, settings component.ReceiverCreateSettings) (*zipkinReceiver, error) {
 	if nextConsumer == nil {
-		return nil, componenterror.ErrNilNextConsumer
+		return nil, component.ErrNilNextConsumer
 	}
 
 	zr := &zipkinReceiver{
@@ -95,7 +92,6 @@ func (zr *zipkinReceiver) Start(_ context.Context, host component.Host) error {
 	}
 
 	var err error
-	zr.host = host
 	zr.server, err = zr.config.HTTPServerSettings.ToServer(host, zr.settings.TelemetrySettings, zr)
 	if err != nil {
 		return err

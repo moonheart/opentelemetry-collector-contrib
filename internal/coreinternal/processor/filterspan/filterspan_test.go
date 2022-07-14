@@ -19,9 +19,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterconfig"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterset"
@@ -247,12 +247,12 @@ func TestSpan_Matching_True(t *testing.T) {
 
 func TestServiceNameForResource(t *testing.T) {
 	td := testdata.GenerateTracesOneSpanNoResource()
-	require.Equal(t, serviceNameForResource(td.ResourceSpans().At(0).Resource()), "<nil-service-name>")
+	name := serviceNameForResource(td.ResourceSpans().At(0).Resource())
+	require.Equal(t, name, "<nil-service-name>")
 
 	td = testdata.GenerateTracesOneSpan()
 	resource := td.ResourceSpans().At(0).Resource()
-	require.Equal(t, serviceNameForResource(resource), "<nil-service-name>")
+	name = serviceNameForResource(resource)
+	require.Equal(t, name, "<nil-service-name>")
 
-	resource.Attributes().InsertString(conventions.AttributeServiceName, "test-service")
-	require.Equal(t, serviceNameForResource(resource), "test-service")
 }

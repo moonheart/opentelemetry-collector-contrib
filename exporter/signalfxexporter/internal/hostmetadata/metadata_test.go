@@ -17,7 +17,6 @@ package hostmetadata
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 
@@ -26,8 +25,8 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -251,8 +250,7 @@ func TestSyncMetadata(t *testing.T) {
 			syncer := NewSyncer(logger, dimClient)
 
 			// mock system stats calls.
-			os.Setenv("HOST_ETC", ".")
-			defer os.Unsetenv("HOST_ETC")
+			t.Setenv("HOST_ETC", ".")
 			cpuInfo = func(context.Context) ([]cpu.InfoStat, error) {
 				return []cpu.InfoStat{tt.cpuStat}, tt.cpuStatErr
 			}

@@ -29,7 +29,7 @@ type MetricsCfg struct {
 	// The type of metric to generate
 	MetricDescriptorType pmetric.MetricDataType
 	// MetricValueType is the type of the numeric value: int or double.
-	MetricValueType pmetric.MetricValueType
+	MetricValueType pmetric.NumberDataPointValueType
 	// If MetricDescriptorType is one of the Sum, this describes if the sum is monotonic or not.
 	IsMonotonicSum bool
 	// A prefix for every metric name
@@ -59,7 +59,7 @@ type MetricsCfg struct {
 func DefaultCfg() MetricsCfg {
 	return MetricsCfg{
 		MetricDescriptorType: pmetric.MetricDataTypeGauge,
-		MetricValueType:      pmetric.MetricValueTypeInt,
+		MetricValueType:      pmetric.NumberDataPointValueTypeInt,
 		MetricNamePrefix:     "",
 		NumILMPerResource:    1,
 		NumMetricsPerILM:     1,
@@ -153,9 +153,9 @@ func populateNumberPoints(cfg MetricsCfg, pts pmetric.NumberDataPointSlice) {
 		pt.SetStartTimestamp(pcommon.Timestamp(cfg.StartTime))
 		pt.SetTimestamp(getTimestamp(cfg.StartTime, cfg.StepSize, i))
 		switch cfg.MetricValueType {
-		case pmetric.MetricValueTypeInt:
+		case pmetric.NumberDataPointValueTypeInt:
 			pt.SetIntVal(int64(cfg.PtVal + i))
-		case pmetric.MetricValueTypeDouble:
+		case pmetric.NumberDataPointValueTypeDouble:
 			pt.SetDoubleVal(float64(cfg.PtVal + i))
 		default:
 			panic("Should not happen")
@@ -183,22 +183,24 @@ func populateDoubleHistogram(cfg MetricsCfg, dh pmetric.Histogram) {
 }
 
 func setDoubleHistogramBounds(hdp pmetric.HistogramDataPoint, bounds ...float64) {
-	hdp.SetBucketCounts(make([]uint64, len(bounds)))
-	hdp.SetExplicitBounds(bounds)
+	counts := make([]uint64, len(bounds))
+	hdp.SetBucketCounts(pcommon.NewImmutableUInt64Slice(counts))
+	hdp.SetExplicitBounds(pcommon.NewImmutableFloat64Slice(bounds))
 }
 
 func addDoubleHistogramVal(hdp pmetric.HistogramDataPoint, val float64) {
 	hdp.SetCount(hdp.Count() + 1)
 	hdp.SetSum(hdp.Sum() + val)
-	buckets := hdp.BucketCounts()
+	buckets := hdp.BucketCounts().AsRaw()
 	bounds := hdp.ExplicitBounds()
-	for i := 0; i < len(bounds); i++ {
-		bound := bounds[i]
+	for i := 0; i < bounds.Len(); i++ {
+		bound := bounds.At(i)
 		if val <= bound {
 			buckets[i]++
 			break
 		}
 	}
+	hdp.SetBucketCounts(pcommon.NewImmutableUInt64Slice(buckets))
 }
 
 func populatePtAttributes(cfg MetricsCfg, lm pcommon.Map) {

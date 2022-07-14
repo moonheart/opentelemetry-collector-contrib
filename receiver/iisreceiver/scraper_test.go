@@ -26,6 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/scrapertest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/scrapertest/golden"
@@ -42,63 +46,66 @@ func TestScrape(t *testing.T) {
 		cfg,
 		consumertest.NewNop(),
 	)
+	scraper.newWatcher = newMockWatcherFactory(nil, 1)
 
-	scraper.watchers = allFakePerfCounters()
+	err := scraper.start(context.Background(), componenttest.NewNopHost())
+	require.NoError(t, err)
 
 	actualMetrics, err := scraper.scrape(context.Background())
 	require.NoError(t, err)
 
 	expectedFile := filepath.Join("testdata", "scraper", "expected.json")
-	golden.WriteMetrics(expectedFile, actualMetrics)
 	expectedMetrics, err := golden.ReadMetrics(expectedFile)
 	require.NoError(t, err)
 
-	require.NoError(t, scrapertest.CompareMetrics(actualMetrics, expectedMetrics))
+	require.NoError(t, scrapertest.CompareMetrics(expectedMetrics, actualMetrics))
 }
 
 func TestScrapeFailure(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 
+	core, obs := observer.New(zapcore.WarnLevel)
+	logger := zap.New(core)
+	rcvrSettings := componenttest.NewNopReceiverCreateSettings()
+	rcvrSettings.Logger = logger
+
 	scraper := newIisReceiver(
-		componenttest.NewNopReceiverCreateSettings(),
+		rcvrSettings,
 		cfg,
 		consumertest.NewNop(),
 	)
 
 	expectedError := "failure to collect metric"
-	scraper.watchers = []winperfcounters.PerfCounterWatcher{
-		newMockPerfCounter(fmt.Errorf(expectedError), 1, winperfcounters.MetricRep{Name: "iis.uptime"}),
+	mockWatcher, err := newMockWatcherFactory(fmt.Errorf(expectedError), 1)("", "", "")
+	require.NoError(t, err)
+	scraper.watcherRecorders = []watcherRecorder{
+		{
+			watcher: mockWatcher,
+			recorder: func(mb *metadata.MetricsBuilder, ts pcommon.Timestamp, val float64) {
+				mb.RecordIisUptimeDataPoint(ts, int64(val))
+			},
+		},
 	}
 
-	_, err := scraper.scrape(context.Background())
-	require.EqualError(t, err, expectedError)
+	scraper.scrape(context.Background())
+
+	require.Equal(t, 1, obs.Len())
+	log := obs.All()[0]
+	require.Equal(t, log.Level, zapcore.WarnLevel)
+	require.Equal(t, "error", log.Context[0].Key)
+	require.EqualError(t, log.Context[0].Interface.(error), expectedError)
 }
 
 type mockPerfCounter struct {
 	watchErr error
 	value    float64
-	winperfcounters.MetricRep
 }
 
-func allFakePerfCounters() []winperfcounters.PerfCounterWatcher {
-	return []winperfcounters.PerfCounterWatcher{
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.connection.active"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.connection.anonymous"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.connection.attempt.count"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.network.blocked"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.network.file.count", Attributes: map[string]string{metadata.A.Direction: "received"}}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.network.io", Attributes: map[string]string{metadata.A.Direction: "sent"}}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.request.count", Attributes: map[string]string{metadata.A.Request: "get"}}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.request.queue.age.max"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.request.queue.count"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.request.rejected"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.thread.active"}),
-		newMockPerfCounter(nil, 1, winperfcounters.MetricRep{Name: "iis.uptime"}),
+func newMockWatcherFactory(watchErr error, value float64) func(string, string,
+	string) (winperfcounters.PerfCounterWatcher, error) {
+	return func(string, string, string) (winperfcounters.PerfCounterWatcher, error) {
+		return &mockPerfCounter{watchErr: watchErr, value: value}, nil
 	}
-}
-
-func newMockPerfCounter(watchErr error, value float64, metric winperfcounters.MetricRep) *mockPerfCounter {
-	return &mockPerfCounter{watchErr: watchErr, value: value, MetricRep: metric}
 }
 
 // Path
@@ -108,14 +115,10 @@ func (mpc *mockPerfCounter) Path() string {
 
 // ScrapeData
 func (mpc *mockPerfCounter) ScrapeData() ([]winperfcounters.CounterValue, error) {
-	return []winperfcounters.CounterValue{{Value: 1, MetricRep: mpc.MetricRep}}, mpc.watchErr
+	return []winperfcounters.CounterValue{{Value: 1}}, mpc.watchErr
 }
 
 // Close
 func (mpc *mockPerfCounter) Close() error {
 	return nil
-}
-
-func (mpc *mockPerfCounter) GetMetricRep() winperfcounters.MetricRep {
-	return mpc.MetricRep
 }

@@ -23,9 +23,9 @@ import (
 	"time"
 
 	zipkinmodel "github.com/openzipkin/zipkin-go/model"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/idutils"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/tracetranslator"
@@ -80,7 +80,7 @@ func resourceSpansToZipkinSpans(rs ptrace.ResourceSpans, estSpanCount int) ([]*z
 	zSpans := make([]*zipkinmodel.SpanModel, 0, estSpanCount)
 	for i := 0; i < ilss.Len(); i++ {
 		ils := ilss.At(i)
-		extractInstrumentationLibraryTags(ils.Scope(), zTags)
+		extractScopeTags(ils.Scope(), zTags)
 		spans := ils.Spans()
 		for j := 0; j < spans.Len(); j++ {
 			zSpan, err := spanToZipkinSpan(spans.At(j), localServiceName, zTags)
@@ -94,7 +94,7 @@ func resourceSpansToZipkinSpans(rs ptrace.ResourceSpans, estSpanCount int) ([]*z
 	return zSpans, nil
 }
 
-func extractInstrumentationLibraryTags(il pcommon.InstrumentationScope, zTags map[string]string) {
+func extractScopeTags(il pcommon.InstrumentationScope, zTags map[string]string) {
 	if ilName := il.Name(); ilName != "" {
 		zTags[conventions.OtelLibraryName] = ilName
 	}

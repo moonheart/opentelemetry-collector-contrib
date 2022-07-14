@@ -25,9 +25,9 @@ import (
 	"github.com/wavefronthq/wavefront-sdk-go/senders"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
 )
 
@@ -202,10 +202,9 @@ func TestExportTraceDataWithInstrumentationDetails(t *testing.T) {
 	)
 	traces := constructTraces([]ptrace.Span{minSpan})
 
-	instrumentationLibrary := traces.ResourceSpans().At(0).ScopeSpans().At(0).
-		Scope()
-	instrumentationLibrary.SetName("instrumentation_name")
-	instrumentationLibrary.SetVersion("v0.0.1")
+	scope := traces.ResourceSpans().At(0).ScopeSpans().At(0).Scope()
+	scope.SetName("instrumentation_name")
+	scope.SetVersion("v0.0.1")
 
 	expected := []*span{{
 		Name:    "root",

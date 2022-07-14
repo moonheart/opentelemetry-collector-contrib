@@ -79,12 +79,12 @@ func logdataToObservIQFormat(ld plog.Logs, agentID string, agentName string, bui
 				jsonOIQLogEntry, err := json.Marshal(oiqLogEntry)
 
 				if err != nil {
-					//Skip this log, keep record of error
+					// Skip this log, keep record of error
 					errorsOut = append(errorsOut, consumererror.NewPermanent(err))
 					continue
 				}
 
-				//fnv sum of the message is ID
+				// fnv sum of the message is ID
 				fnvHash.Reset()
 				_, err = fnvHash.Write(jsonOIQLogEntry)
 				if err != nil {
@@ -125,10 +125,15 @@ func resourceAndInstrumentationLogToEntry(resMap map[string]interface{}, log plo
 }
 
 func timestampFromRecord(log plog.LogRecord) string {
-	if log.Timestamp() == 0 {
-		return timeNow().UTC().Format(timestampFieldOutputLayout)
+	if log.Timestamp() != 0 {
+		return log.Timestamp().AsTime().UTC().Format(timestampFieldOutputLayout)
 	}
-	return log.Timestamp().AsTime().UTC().Format(timestampFieldOutputLayout)
+
+	if log.ObservedTimestamp() != 0 {
+		return log.ObservedTimestamp().AsTime().UTC().Format(timestampFieldOutputLayout)
+	}
+
+	return timeNow().UTC().Format(timestampFieldOutputLayout)
 }
 
 func messageFromRecord(log plog.LogRecord) string {
@@ -147,7 +152,7 @@ func bodyFromRecord(log plog.LogRecord) interface{} {
 	return nil
 }
 
-//Mappings from opentelemetry severity number to observIQ severity string
+// Mappings from opentelemetry severity number to observIQ severity string
 var severityNumberToObservIQName = map[int32]string{
 	0:  "default",
 	1:  "trace",

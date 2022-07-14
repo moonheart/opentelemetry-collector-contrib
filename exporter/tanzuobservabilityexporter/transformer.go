@@ -21,9 +21,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/wavefronthq/wavefront-sdk-go/senders"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/tracetranslator"
 )
@@ -129,7 +129,7 @@ func getSourceAndResourceTagsAndSourceKey(attributes pcommon.Map) (
 		}
 	}
 
-	//returning an empty source is fine as wavefront.go.sdk will set it up to a default value(os.hostname())
+	// returning an empty source is fine as wavefront.go.sdk will set it up to a default value(os.hostname())
 	return source, attributesWithoutSource, sourceKey
 }
 

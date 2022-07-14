@@ -23,9 +23,9 @@ import (
 	"go.elastic.co/apm/model"
 	"go.elastic.co/apm/transport/transporttest"
 	"go.elastic.co/fastjson"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/elasticexporter/internal/translator/elastic"
 )
@@ -300,9 +300,8 @@ func encodeSpanEvents(t *testing.T, language string, events ...ptrace.SpanEvent)
 	var recorder transporttest.RecorderTransport
 	resource := pcommon.NewResource()
 	resource.Attributes().InsertString(conventions.AttributeTelemetrySDKLanguage, language)
-	elastic.EncodeResourceMetadata(resource, &w)
-	err := elastic.EncodeSpan(span, pcommon.NewInstrumentationScope(), resource, &w)
-	assert.NoError(t, err)
+	assert.NoError(t, elastic.EncodeResourceMetadata(resource, &w))
+	assert.NoError(t, elastic.EncodeSpan(span, pcommon.NewInstrumentationScope(), resource, &w))
 	sendStream(t, &w, &recorder)
 
 	payloads := recorder.Payloads()

@@ -141,7 +141,7 @@ func collectLabelKeysNumberDataPoints(dps pmetric.NumberDataPointSlice, keySet m
 	allInt := true
 	for i := 0; i < dps.Len(); i++ {
 		addLabelKeys(keySet, dps.At(i).Attributes())
-		if dps.At(i).ValueType() != pmetric.MetricValueTypeInt {
+		if dps.At(i).ValueType() != pmetric.NumberDataPointValueTypeInt {
 			allInt = false
 		}
 	}
@@ -229,11 +229,11 @@ func numberDataPointsToOC(dps pmetric.NumberDataPointSlice, labelKeys *labelKeys
 			Timestamp: timestampAsTimestampPb(dp.Timestamp()),
 		}
 		switch dp.ValueType() {
-		case pmetric.MetricValueTypeInt:
+		case pmetric.NumberDataPointValueTypeInt:
 			point.Value = &ocmetrics.Point_Int64Value{
 				Int64Value: dp.IntVal(),
 			}
-		case pmetric.MetricValueTypeDouble:
+		case pmetric.NumberDataPointValueTypeDouble:
 			point.Value = &ocmetrics.Point_DoubleValue{
 				DoubleValue: dp.DoubleVal(),
 			}
@@ -281,29 +281,29 @@ func doubleHistogramPointToOC(dps pmetric.HistogramDataPointSlice, labelKeys *la
 	return timeseries
 }
 
-func histogramExplicitBoundsToOC(bounds []float64) *ocmetrics.DistributionValue_BucketOptions {
-	if len(bounds) == 0 {
+func histogramExplicitBoundsToOC(bounds pcommon.ImmutableFloat64Slice) *ocmetrics.DistributionValue_BucketOptions {
+	if bounds.Len() == 0 {
 		return nil
 	}
 
 	return &ocmetrics.DistributionValue_BucketOptions{
 		Type: &ocmetrics.DistributionValue_BucketOptions_Explicit_{
 			Explicit: &ocmetrics.DistributionValue_BucketOptions_Explicit{
-				Bounds: bounds,
+				Bounds: bounds.AsRaw(),
 			},
 		},
 	}
 }
 
-func histogramBucketsToOC(bcts []uint64) []*ocmetrics.DistributionValue_Bucket {
-	if len(bcts) == 0 {
+func histogramBucketsToOC(bcts pcommon.ImmutableUInt64Slice) []*ocmetrics.DistributionValue_Bucket {
+	if bcts.Len() == 0 {
 		return nil
 	}
 
-	ocBuckets := make([]*ocmetrics.DistributionValue_Bucket, 0, len(bcts))
-	for _, bucket := range bcts {
+	ocBuckets := make([]*ocmetrics.DistributionValue_Bucket, 0, bcts.Len())
+	for i := 0; i < bcts.Len(); i++ {
 		ocBuckets = append(ocBuckets, &ocmetrics.DistributionValue_Bucket{
-			Count: int64(bucket),
+			Count: int64(bcts.At(i)),
 		})
 	}
 	return ocBuckets
@@ -357,7 +357,7 @@ func summaryPercentilesToOC(qtls pmetric.ValueAtQuantileSlice) []*ocmetrics.Summ
 	return ocPercentiles
 }
 
-func exemplarsToOC(bounds []float64, ocBuckets []*ocmetrics.DistributionValue_Bucket, exemplars pmetric.ExemplarSlice) {
+func exemplarsToOC(bounds pcommon.ImmutableFloat64Slice, ocBuckets []*ocmetrics.DistributionValue_Bucket, exemplars pmetric.ExemplarSlice) {
 	if exemplars.Len() == 0 {
 		return
 	}
@@ -366,14 +366,14 @@ func exemplarsToOC(bounds []float64, ocBuckets []*ocmetrics.DistributionValue_Bu
 		exemplar := exemplars.At(i)
 		var val float64
 		switch exemplar.ValueType() {
-		case pmetric.MetricValueTypeInt:
+		case pmetric.ExemplarValueTypeInt:
 			val = float64(exemplar.IntVal())
-		case pmetric.MetricValueTypeDouble:
+		case pmetric.ExemplarValueTypeDouble:
 			val = exemplar.DoubleVal()
 		}
 		pos := 0
-		for ; pos < len(bounds); pos++ {
-			if val > bounds[pos] {
+		for ; pos < bounds.Len(); pos++ {
+			if val > bounds.At(pos) {
 				continue
 			}
 			break

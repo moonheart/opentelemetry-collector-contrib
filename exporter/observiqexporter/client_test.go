@@ -29,9 +29,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
 )
 
@@ -139,7 +139,7 @@ func TestClientSendLogs(t *testing.T) {
 		responseStatus int
 		respBody       string
 		timeoutTimer   bool // Timeout the last set timer created through timeAfterFunc()
-		//Outputs
+		// Outputs
 		verifyRequest    requestVerificationFunc // Function is used to verify the request submitted to the client is valid.
 		shouldError      bool
 		errorIsPermanant bool

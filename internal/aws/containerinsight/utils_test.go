@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+// nolint:gocritic
 package containerinsight
 
 import (
@@ -181,9 +182,9 @@ func checkMetricsAreExpected(t *testing.T, md pmetric.Metrics, fields map[string
 				assert.Equal(t, 1, dps.Len())
 				dp := dps.At(0)
 				switch dp.ValueType() {
-				case pmetric.MetricValueTypeDouble:
+				case pmetric.NumberDataPointValueTypeDouble:
 					assert.Equal(t, convertToFloat64(fields[metricName]), dp.DoubleVal())
-				case pmetric.MetricValueTypeInt:
+				case pmetric.NumberDataPointValueTypeInt:
 					assert.Equal(t, convertToInt64(fields[metricName]), dp.IntVal())
 				}
 				assert.Equal(t, pcommon.Timestamp(timeUnixNano), dp.Timestamp())

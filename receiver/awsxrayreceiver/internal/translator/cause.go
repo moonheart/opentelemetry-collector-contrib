@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	awsxray "github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/xray"
 )
@@ -90,11 +90,13 @@ func convertStackFramesToStackTraceStr(excp awsxray.Exception) string {
 	// resulting stacktrace looks like:
 	// "<*excp.Type>: <*excp.Message>\n" +
 	// "\tat <*frameN.Label>(<*frameN.Path>: <*frameN.Line>)\n"
+	exceptionType := awsxray.StringOrEmpty(excp.Type)
+	exceptionMessage := awsxray.StringOrEmpty(excp.Message)
 	var b strings.Builder
-	b.Grow(len(*excp.Type) + len(": ") + len(*excp.Message) + len("\n"))
-	b.WriteString(*excp.Type)
+	b.Grow(len(exceptionType) + len(": ") + len(exceptionMessage) + len("\n"))
+	b.WriteString(exceptionType)
 	b.WriteString(": ")
-	b.WriteString(*excp.Message)
+	b.WriteString(exceptionMessage)
 	b.WriteString("\n")
 	for _, frame := range excp.Stack {
 		label := awsxray.StringOrEmpty(frame.Label)

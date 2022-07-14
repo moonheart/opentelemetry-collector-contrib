@@ -34,18 +34,15 @@ const (
 )
 
 // newGraphiteFormatter creates new formatter for given SourceFormat template
-func newGraphiteFormatter(template string) (graphiteFormatter, error) {
-	r, err := regexp.Compile(sourceRegex)
-	if err != nil {
-		return graphiteFormatter{}, err
-	}
+func newGraphiteFormatter(template string) graphiteFormatter {
+	r := regexp.MustCompile(sourceRegex)
 
 	sf := newSourceFormat(r, template)
 
 	return graphiteFormatter{
 		template: sf,
 		replacer: strings.NewReplacer(`.`, `_`, ` `, `_`),
-	}, nil
+	}
 }
 
 // escapeGraphiteString replaces dot and space using replacer,
@@ -81,13 +78,13 @@ func (gf *graphiteFormatter) format(f fields, metricName string) string {
 // with additional information from fields
 func (gf *graphiteFormatter) numberRecord(fs fields, name string, dataPoint pmetric.NumberDataPoint) string {
 	switch dataPoint.ValueType() {
-	case pmetric.MetricValueTypeDouble:
+	case pmetric.NumberDataPointValueTypeDouble:
 		return fmt.Sprintf("%s %g %d",
 			gf.format(fs, name),
 			dataPoint.DoubleVal(),
 			dataPoint.Timestamp()/pcommon.Timestamp(time.Second),
 		)
-	case pmetric.MetricValueTypeInt:
+	case pmetric.NumberDataPointValueTypeInt:
 		return fmt.Sprintf("%s %d %d",
 			gf.format(fs, name),
 			dataPoint.IntVal(),

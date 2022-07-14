@@ -19,9 +19,9 @@ import (
 	"strconv"
 	"time"
 
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"google.golang.org/protobuf/proto"
 
 	cls "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/tencentcloudlogserviceexporter/proto"
@@ -111,15 +111,15 @@ func resourceToLogContents(resource pcommon.Resource) []*cls.Log_Content {
 	}
 }
 
-func instrumentationLibraryToLogContents(instrumentationLibrary pcommon.InstrumentationScope) []*cls.Log_Content {
+func instrumentationLibraryToLogContents(scope pcommon.InstrumentationScope) []*cls.Log_Content {
 	return []*cls.Log_Content{
 		{
 			Key:   proto.String(clsLogInstrumentationName),
-			Value: proto.String(instrumentationLibrary.Name()),
+			Value: proto.String(scope.Name()),
 		},
 		{
 			Key:   proto.String(clsLogInstrumentationVersion),
-			Value: proto.String(instrumentationLibrary.Version()),
+			Value: proto.String(scope.Version()),
 		},
 	}
 }

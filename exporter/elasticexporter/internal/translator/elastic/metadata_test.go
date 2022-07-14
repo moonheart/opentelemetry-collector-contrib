@@ -21,8 +21,8 @@ import (
 	"go.elastic.co/apm/model"
 	"go.elastic.co/apm/transport/transporttest"
 	"go.elastic.co/fastjson"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/elasticexporter/internal/translator/elastic"
 )
@@ -147,7 +147,7 @@ func metadataWithResource(t *testing.T, resource pcommon.Resource) metadata {
 	var out metadata
 	var recorder transporttest.RecorderTransport
 	var w fastjson.Writer
-	elastic.EncodeResourceMetadata(resource, &w)
+	assert.NoError(t, elastic.EncodeResourceMetadata(resource, &w))
 	sendStream(t, &w, &recorder)
 	out.system, out.process, out.service, out.labels = recorder.Metadata()
 	return out

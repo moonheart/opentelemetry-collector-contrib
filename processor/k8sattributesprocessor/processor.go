@@ -20,11 +20,11 @@ import (
 	"strconv"
 
 	"go.opentelemetry.io/collector/component"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.8.0"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.8.0"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sconfig"
@@ -107,17 +107,23 @@ func (kp *kubernetesprocessor) processLogs(ctx context.Context, ld plog.Logs) (p
 
 // processResource adds Pod metadata tags to resource based on pod association configuration
 func (kp *kubernetesprocessor) processResource(ctx context.Context, resource pcommon.Resource) {
-	podIdentifierKey, podIdentifierValue := extractPodID(ctx, resource.Attributes(), kp.podAssociations)
-	if podIdentifierKey != "" {
-		resource.Attributes().InsertString(podIdentifierKey, string(podIdentifierValue))
-	}
+	podIdentifierValue := extractPodID(ctx, resource.Attributes(), kp.podAssociations)
+	kp.logger.Debug("evaluating pod identifier", zap.Any("value", podIdentifierValue))
 
+	for i := range podIdentifierValue {
+		if podIdentifierValue[i].Source.From == kube.ConnectionSource && podIdentifierValue[i].Value != "" {
+			resource.Attributes().InsertString(k8sIPLabelName, podIdentifierValue[i].Value)
+			break
+		}
+	}
 	if kp.passthroughMode {
 		return
 	}
 
-	if podIdentifierKey != "" {
+	if podIdentifierValue.IsNotEmpty() {
 		if pod, ok := kp.kc.GetPod(podIdentifierValue); ok {
+			kp.logger.Debug("getting the pod", zap.Any("pod", pod))
+
 			for key, val := range pod.Attributes {
 				resource.Attributes().InsertString(key, val)
 			}

@@ -20,9 +20,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
 )
 
@@ -55,7 +55,8 @@ func BenchmarkWithoutPool(b *testing.B) {
 		buffer := bytes.NewBuffer(make([]byte, 0, 2048))
 		encoder := json.NewEncoder(buffer)
 		segment, _ := MakeSegment(span, pcommon.NewResource(), nil, false)
-		encoder.Encode(*segment)
+		err := encoder.Encode(*segment)
+		assert.NoError(b, err)
 		logger.Info(buffer.String())
 	}
 }
@@ -69,7 +70,8 @@ func BenchmarkWithPool(b *testing.B) {
 		b.StartTimer()
 		w := wp.borrow()
 		segment, _ := MakeSegment(span, pcommon.NewResource(), nil, false)
-		w.Encode(*segment)
+		err := w.Encode(*segment)
+		assert.Nil(b, err)
 		logger.Info(w.String())
 	}
 }

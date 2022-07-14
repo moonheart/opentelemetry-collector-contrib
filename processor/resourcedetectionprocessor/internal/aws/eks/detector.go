@@ -20,8 +20,8 @@ import (
 	"os"
 
 	"go.opentelemetry.io/collector/component"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -69,7 +69,7 @@ func NewDetector(set component.ProcessorCreateSettings, _ internal.DetectorConfi
 func (detector *detector) Detect(ctx context.Context) (resource pcommon.Resource, schemaURL string, err error) {
 	res := pcommon.NewResource()
 
-	//Check if running on EKS.
+	// Check if running on EKS.
 	isEKS, err := isEKS(ctx, detector.utils)
 	if !isEKS {
 		detector.logger.Debug("Unable to identify EKS environment", zap.Error(err))

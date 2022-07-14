@@ -24,9 +24,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.6.1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 )
 
 /*
@@ -679,7 +679,8 @@ func TestPushTraceData(t *testing.T) {
 				transport: transport,
 			}
 
-			s.pushTraceData(context.Background(), test.td)
+			err := s.pushTraceData(context.Background(), test.td)
+			assert.Nil(t, err)
 			assert.Equal(t, test.called, transport.called)
 		})
 	}
