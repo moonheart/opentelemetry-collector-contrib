@@ -20,10 +20,10 @@ import (
 	"net/http"
 	"sync"
 
-	datadogpb "github.com/DataDog/datadog-agent/pkg/trace/exportable/pb"
+	datadogapi "github.com/DataDog/datadog-agent/pkg/trace/api"
+	datadogpb "github.com/DataDog/datadog-agent/pkg/trace/pb"
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componenterror"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/obsreport"
 )
@@ -42,7 +42,7 @@ type datadogReceiver struct {
 
 func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params component.ReceiverCreateSettings) (component.TracesReceiver, error) {
 	if nextConsumer == nil {
-		return nil, componenterror.ErrNilNextConsumer
+		return nil, component.ErrNilNextConsumer
 	}
 
 	return &datadogReceiver{
@@ -57,13 +57,25 @@ func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params com
 	}, nil
 }
 
+func (ddr datadogReceiver) handleWithVersion(v datadogapi.Version, f func(datadogapi.Version, http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if mediaType := getMediaType(req); mediaType == "application/msgpack" && (v == v01 || v == v02) {
+			// msgpack is only supported for versions >= v0.3
+			http.Error(w, fmt.Sprintf("unsupported media type: %q", mediaType), http.StatusBadRequest)
+			return
+		}
+
+		f(v, w, req)
+	}
+}
+
 func (ddr *datadogReceiver) Start(_ context.Context, host component.Host) error {
 	go ddr.startOnce.Do(func() {
 		defer ddr.shutdownWG.Done()
 		ddmux := mux.NewRouter()
-		ddmux.HandleFunc("/v0.3/traces", ddr.handleTraces)
-		ddmux.HandleFunc("/v0.4/traces", ddr.handleTraces)
-		ddmux.HandleFunc("/v0.5/traces", ddr.handleTraces)
+		ddmux.HandleFunc("/v0.3/traces", ddr.handleWithVersion(v03, ddr.handleTraces))
+		ddmux.HandleFunc("/v0.4/traces", ddr.handleWithVersion(v04, ddr.handleTraces))
+		ddmux.HandleFunc("/v0.5/traces", ddr.handleWithVersion(v05, ddr.handleTraces))
 		ddr.server.Handler = ddmux
 		if err := ddr.server.ListenAndServe(); err != http.ErrServerClosed {
 			host.ReportFatalError(fmt.Errorf("error starting datadog receiver: %w", err))
@@ -81,7 +93,7 @@ func (ddr *datadogReceiver) Shutdown(ctx context.Context) (err error) {
 	return err
 }
 
-func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Request) {
+func (ddr *datadogReceiver) handleTraces(v datadogapi.Version, w http.ResponseWriter, req *http.Request) {
 	obsCtx := ddr.obs.StartTracesOp(req.Context())
 	var err error
 	var spanCount int
@@ -90,7 +102,7 @@ func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Reques
 	}(&spanCount)
 	var ddTraces datadogpb.Traces
 
-	err = decodeRequest(req, &ddTraces)
+	err = decodeRequestVersion(v, req, &ddTraces)
 	if err != nil {
 		http.Error(w, "Unable to unmarshal reqs", http.StatusInternalServerError)
 		return

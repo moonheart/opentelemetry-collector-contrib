@@ -17,15 +17,15 @@ package datadogreceiver // import "github.com/open-telemetry/opentelemetry-colle
 import (
 	"encoding/binary"
 	"encoding/json"
+	datadogapi "github.com/DataDog/datadog-agent/pkg/trace/api"
+	datadogpb "github.com/DataDog/datadog-agent/pkg/trace/pb"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/ptrace"
+	semconv "go.opentelemetry.io/collector/semconv/v1.6.1"
+	"io"
 	"mime"
 	"net/http"
 	"strings"
-
-	datadogpb "github.com/DataDog/datadog-agent/pkg/trace/exportable/pb"
-	"github.com/tinylib/msgp/msgp"
-	semconv "go.opentelemetry.io/collector/model/semconv/v1.6.1"
-	"go.opentelemetry.io/collector/pdata/pcommon"
-	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
 func toTraces(traces datadogpb.Traces, req *http.Request) ptrace.Traces {
@@ -130,18 +130,24 @@ func translateDataDogKeyToOtel(k string) string {
 
 }
 
-func decodeRequest(req *http.Request, dest *datadogpb.Traces) error {
-	switch mediaType := getMediaType(req); mediaType {
-	case "application/msgpack":
-		if strings.HasPrefix(req.URL.Path, "/v0.5") {
-			reader := datadogpb.NewMsgpReader(req.Body)
-			defer datadogpb.FreeMsgpReader(reader)
-			return dest.DecodeMsgDictionary(reader)
+func decodeRequestVersion(v datadogapi.Version, req *http.Request, dest *datadogpb.Traces) error {
+	switch v {
+	case v05:
+		buf := getBuffer()
+		defer putBuffer(buf)
+		if _, err := io.Copy(buf, req.Body); err != nil {
+			return err
 		}
-		return msgp.Decode(req.Body, dest)
+		err := dest.UnmarshalMsgDictionary(buf.Bytes())
+		if err != nil {
+			return err
+		}
 	default:
-		return json.NewDecoder(req.Body).Decode(dest)
+		if err := decodeRequest(req, dest); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func getMediaType(req *http.Request) string {
@@ -163,4 +169,42 @@ func uInt64ToSpanID(id uint64) pcommon.SpanID {
 	spanID := [8]byte{}
 	binary.BigEndian.PutUint64(spanID[:], id)
 	return pcommon.NewSpanID(spanID)
+}
+
+// decodeRequest decodes the payload in http request `req` into `dest`.
+// It handles only v02, v03, v04 requests.
+// - ranHook reports whether the decoder was able to run the pb.MetaHook
+// - err is the first error encountered
+func decodeRequest(req *http.Request, dest *datadogpb.Traces) (err error) {
+	switch mediaType := getMediaType(req); mediaType {
+	case "application/msgpack":
+		buf := getBuffer()
+		defer putBuffer(buf)
+		_, err = io.Copy(buf, req.Body)
+		if err != nil {
+			return err
+		}
+		_, err = dest.UnmarshalMsg(buf.Bytes())
+		return err
+	case "application/json":
+		fallthrough
+	case "text/json":
+		fallthrough
+	case "":
+		err = json.NewDecoder(req.Body).Decode(&dest)
+		return err
+	default:
+		// do our best
+		if err1 := json.NewDecoder(req.Body).Decode(&dest); err1 != nil {
+			buf := getBuffer()
+			defer putBuffer(buf)
+			_, err2 := io.Copy(buf, req.Body)
+			if err2 != nil {
+				return err2
+			}
+			_, err2 = dest.UnmarshalMsg(buf.Bytes())
+			return err2
+		}
+		return nil
+	}
 }

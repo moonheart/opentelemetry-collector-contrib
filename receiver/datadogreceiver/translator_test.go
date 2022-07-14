@@ -16,10 +16,11 @@ package datadogreceiver
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"testing"
 
-	"github.com/DataDog/datadog-agent/pkg/trace/exportable/pb"
+	"github.com/DataDog/datadog-agent/pkg/trace/pb"
 	"github.com/stretchr/testify/assert"
 	vmsgp "github.com/vmihailenco/msgpack/v4"
 )
@@ -67,18 +68,21 @@ var data = [2]interface{}{
 func TestTracePayloadV05Unmarshalling(t *testing.T) {
 	payload, err := vmsgp.Marshal(&data)
 	assert.NoError(t, err)
-	dc := pb.NewMsgpReader(bytes.NewReader(payload))
-	defer pb.FreeMsgpReader(dc)
 
+	buf := getBuffer()
+	defer putBuffer(buf)
+	if _, err := io.Copy(buf, bytes.NewReader(payload)); err != nil {
+		t.Fatal(err)
+	}
 	var traces pb.Traces
-	if err := traces.DecodeMsgDictionary(dc); err != nil {
+	if err := traces.UnmarshalMsgDictionary(buf.Bytes()); err != nil {
 		t.Fatal(err)
 	}
 	req := &http.Request{RequestURI: "/v0.5/traces"}
 
 	translated := toTraces(traces, req)
 	assert.Equal(t, 1, translated.SpanCount(), "Span Count wrong")
-	span := translated.ResourceSpans().At(0).InstrumentationLibrarySpans().At(0).Spans().At(0)
+	span := translated.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0)
 	assert.NotNil(t, span)
 	assert.Equal(t, 3, span.Attributes().Len(), "missing tags")
 	value, exists := span.Attributes().Get("service.name")
@@ -91,11 +95,14 @@ func BenchmarkTranslator(b *testing.B) {
 
 	payload, err := vmsgp.Marshal(&data)
 	assert.NoError(b, err)
-	dc := pb.NewMsgpReader(bytes.NewReader(payload))
-	defer pb.FreeMsgpReader(dc)
+	buf := getBuffer()
+	defer putBuffer(buf)
+	if _, err := io.Copy(buf, bytes.NewReader(payload)); err != nil {
+		b.Fatal(err)
+	}
 
 	var traces pb.Traces
-	if err := traces.DecodeMsgDictionary(dc); err != nil {
+	if err := traces.UnmarshalMsgDictionary(buf.Bytes()); err != nil {
 		b.Fatal(err)
 	}
 
