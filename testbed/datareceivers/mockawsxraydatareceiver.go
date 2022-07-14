@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:gocritic
 package datareceivers // import "github.com/open-telemetry/opentelemetry-collector-contrib/testbed/datareceivers"
 
 import (
@@ -76,7 +77,7 @@ func (ar *MockAwsXrayDataReceiver) Start(tc consumer.Traces, _ consumer.Metrics,
 		return err
 	}
 
-	return ar.receiver.Start(context.Background(), ar)
+	return ar.receiver.Start(context.Background(), componenttest.NewNopHost())
 }
 
 func (ar *MockAwsXrayDataReceiver) Stop() error {

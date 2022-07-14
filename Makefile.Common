@@ -12,6 +12,7 @@ GOTEST=$(GOCMD) test
 GOOS=$(shell $(GOCMD) env GOOS)
 GOARCH=$(shell $(GOCMD) env GOARCH)
 ADDLICENCESE= addlicense
+MDLINKCHECK=markdown-link-check
 MISSPELL=misspell -error
 MISSPELL_CORRECTION=misspell -w
 LINT=golangci-lint
@@ -32,6 +33,9 @@ ALL_SRC_AND_DOC := $(shell find $(ALL_PKG_DIRS) -name "*.md" -o -name "*.go" -o 
 
 # ALL_PKGS is used with 'go cover'
 ALL_PKGS := $(shell $(GOCMD) list $(sort $(dir $(ALL_SRC))))
+
+pwd:
+	@pwd
 
 all-pkgs:
 	@echo $(ALL_PKGS) | tr ' ' '\n' | sort
@@ -91,6 +95,12 @@ checklicense:
 		else \
 			echo "Check License finished successfully"; \
 		fi
+
+.PHONY: checklinks
+checklinks:
+	command -v $(MDLINKCHECK) >/dev/null 2>&1 || { echo >&2 "$(MDLINKCHECK) not installed. Run 'npm install -g markdown-link-check'"; exit 1; }
+	find . -name \*.md -print0 | xargs -0 -n1 \
+		$(MDLINKCHECK) -q -c $(SRC_ROOT)/.github/workflows/check_links_config.json || true
 
 .PHONY: fmt
 fmt:
