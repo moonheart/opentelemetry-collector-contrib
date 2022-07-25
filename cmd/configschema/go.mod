@@ -9,7 +9,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry v0.55.0
 	github.com/stretchr/testify v1.8.0
 	go.opentelemetry.io/collector v0.55.0
-	go.opentelemetry.io/collector/pdata v0.55.0
+	go.opentelemetry.io/collector/pdata v0.56.0
 	go.uber.org/multierr v1.8.0
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3
 	golang.org/x/text v0.3.7
@@ -533,7 +533,7 @@ require (
 	google.golang.org/api v0.86.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f // indirect
-	google.golang.org/grpc v1.47.0 // indirect
+	google.golang.org/grpc v1.48.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/alexcesaro/statsd.v2 v2.0.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
