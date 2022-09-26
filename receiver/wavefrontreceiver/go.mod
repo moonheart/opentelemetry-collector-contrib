@@ -3,14 +3,14 @@ module github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefr
 go 1.17
 
 require (
-	github.com/census-instrumentation/opencensus-proto v0.3.0
+	github.com/census-instrumentation/opencensus-proto v0.4.1
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/common v0.55.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus v0.55.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver v0.55.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/collectdreceiver v0.55.0
 	github.com/stretchr/testify v1.8.0
 	go.opentelemetry.io/collector v0.55.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.28.1
 )
 
 require (
@@ -36,11 +36,11 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
+	golang.org/x/sys v0.0.0-20220610221304-9f5ed59c137d // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa // indirect
-	google.golang.org/grpc v1.47.0 // indirect
+	google.golang.org/genproto v0.0.0-20220822174746-9e6da59bd2fc // indirect
+	google.golang.org/grpc v1.49.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
