@@ -23,6 +23,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/trace/agent"
 	traceconfig "github.com/DataDog/datadog-agent/pkg/trace/config"
+	traceinfo "github.com/DataDog/datadog-agent/pkg/trace/info"
 	tracelog "github.com/DataDog/datadog-agent/pkg/trace/log"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
@@ -32,13 +33,12 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/zorkian/go-datadog-api.v2"
 
+	"github.com/DataDog/datadog-agent/pkg/otlp/model/source"
+
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metrics"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/model/source"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/scrub"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/utils"
-
-	modelsource "github.com/DataDog/datadog-agent/pkg/otlp/model/source"
 )
 
 type traceExporter struct {
@@ -59,8 +59,8 @@ func newTracesExporter(ctx context.Context, params component.ExporterCreateSetti
 	if err := utils.ValidateAPIKey(params.Logger, client); err != nil && cfg.API.FailOnInvalidKey {
 		return nil, err
 	}
+	traceinfo.Version = fmt.Sprintf("datadogexporter-%s-%s", params.BuildInfo.Command, params.BuildInfo.Version)
 	acfg := traceconfig.New()
-	acfg.AgentVersion = fmt.Sprintf("datadogexporter-%s-%s", params.BuildInfo.Command, params.BuildInfo.Version)
 	src, err := sourceProvider.Source(ctx)
 	if err != nil {
 		return nil, err
@@ -126,9 +126,9 @@ func (exp *traceExporter) consumeTraces(
 		rspan := rspans.At(i)
 		src := exp.agent.OTLPReceiver.ReceiveResourceSpans(rspan, http.Header{}, "otlp-exporter")
 		switch src.Kind {
-		case modelsource.HostnameKind:
+		case source.HostnameKind:
 			hosts[src.Identifier] = struct{}{}
-		case modelsource.AWSECSFargateKind:
+		case source.AWSECSFargateKind:
 			tags[src.Tag()] = struct{}{}
 		}
 	}
