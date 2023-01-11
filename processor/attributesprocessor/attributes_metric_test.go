@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,16 +20,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/processor"
+	"go.opentelemetry.io/collector/processor/processortest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/attraction"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterconfig"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterset"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/testdata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterconfig"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterset"
 )
 
 // Common structure for all the Tests
@@ -40,7 +39,7 @@ type metricTestCase struct {
 }
 
 // runIndividualMetricTestCase is the common logic of passing metric data through a configured attributes processor.
-func runIndividualMetricTestCase(t *testing.T, mt metricTestCase, mp component.MetricsProcessor) {
+func runIndividualMetricTestCase(t *testing.T, mt metricTestCase, mp processor.Metrics) {
 	t.Run(mt.name, func(t *testing.T) {
 		md := generateMetricData(mt.name, mt.inputAttributes)
 		assert.NoError(t, mp.ConsumeMetrics(context.Background(), md))
@@ -53,39 +52,44 @@ func runIndividualMetricTestCase(t *testing.T, mt metricTestCase, mp component.M
 func generateMetricData(resourceName string, attrs map[string]interface{}) pmetric.Metrics {
 	md := pmetric.NewMetrics()
 	res := md.ResourceMetrics().AppendEmpty()
-	res.Resource().Attributes().InsertString("name", resourceName)
+	res.Resource().Attributes().PutStr("name", resourceName)
 	sl := res.ScopeMetrics().AppendEmpty()
 	m := sl.Metrics().AppendEmpty()
 
-	switch m.DataType() {
-	case pmetric.MetricDataTypeGauge:
+	switch m.Type() {
+	case pmetric.MetricTypeGauge:
 		dps := m.Gauge().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			pcommon.NewMapFromRaw(attrs).CopyTo(dps.At(i).Attributes())
+			//nolint:errcheck
+			dps.At(i).Attributes().FromRaw(attrs)
 			dps.At(i).Attributes().Sort()
 		}
-	case pmetric.MetricDataTypeSum:
+	case pmetric.MetricTypeSum:
 		dps := m.Sum().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			pcommon.NewMapFromRaw(attrs).CopyTo(dps.At(i).Attributes())
+			//nolint:errcheck
+			dps.At(i).Attributes().FromRaw(attrs)
 			dps.At(i).Attributes().Sort()
 		}
-	case pmetric.MetricDataTypeHistogram:
+	case pmetric.MetricTypeHistogram:
 		dps := m.Histogram().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			pcommon.NewMapFromRaw(attrs).CopyTo(dps.At(i).Attributes())
+			//nolint:errcheck
+			dps.At(i).Attributes().FromRaw(attrs)
 			dps.At(i).Attributes().Sort()
 		}
-	case pmetric.MetricDataTypeExponentialHistogram:
+	case pmetric.MetricTypeExponentialHistogram:
 		dps := m.ExponentialHistogram().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			pcommon.NewMapFromRaw(attrs).CopyTo(dps.At(i).Attributes())
+			//nolint:errcheck
+			dps.At(i).Attributes().FromRaw(attrs)
 			dps.At(i).Attributes().Sort()
 		}
-	case pmetric.MetricDataTypeSummary:
+	case pmetric.MetricTypeSummary:
 		dps := m.Summary().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			pcommon.NewMapFromRaw(attrs).CopyTo(dps.At(i).Attributes())
+			//nolint:errcheck
+			dps.At(i).Attributes().FromRaw(attrs)
 			dps.At(i).Attributes().Sort()
 		}
 	}
@@ -104,28 +108,28 @@ func sortMetricAttributes(md pmetric.Metrics) {
 			for k := 0; k < metrics.Len(); k++ {
 				m := metrics.At(k)
 
-				switch m.DataType() {
-				case pmetric.MetricDataTypeGauge:
+				switch m.Type() {
+				case pmetric.MetricTypeGauge:
 					dps := m.Gauge().DataPoints()
 					for l := 0; l < dps.Len(); l++ {
 						dps.At(l).Attributes().Sort()
 					}
-				case pmetric.MetricDataTypeSum:
+				case pmetric.MetricTypeSum:
 					dps := m.Sum().DataPoints()
 					for l := 0; l < dps.Len(); l++ {
 						dps.At(l).Attributes().Sort()
 					}
-				case pmetric.MetricDataTypeHistogram:
+				case pmetric.MetricTypeHistogram:
 					dps := m.Histogram().DataPoints()
 					for l := 0; l < dps.Len(); l++ {
 						dps.At(l).Attributes().Sort()
 					}
-				case pmetric.MetricDataTypeExponentialHistogram:
+				case pmetric.MetricTypeExponentialHistogram:
 					dps := m.ExponentialHistogram().DataPoints()
 					for l := 0; l < dps.Len(); l++ {
 						dps.At(l).Attributes().Sort()
 					}
-				case pmetric.MetricDataTypeSummary:
+				case pmetric.MetricTypeSummary:
 					dps := m.Summary().DataPoints()
 					for l := 0; l < dps.Len(); l++ {
 						dps.At(l).Attributes().Sort()
@@ -174,7 +178,7 @@ func TestMetricProcessor_NilEmptyData(t *testing.T) {
 		{Key: "attribute1", Action: attraction.DELETE},
 	}
 
-	mp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), oCfg, consumertest.NewNop())
+	mp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), oCfg, consumertest.NewNop())
 	require.Nil(t, err)
 	require.NotNil(t, mp)
 	for i := range metricTestCases {
@@ -237,7 +241,7 @@ func TestAttributes_FilterMetrics(t *testing.T) {
 		},
 		Config: *createConfig(filterset.Strict),
 	}
-	mp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), cfg, consumertest.NewNop())
+	mp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, mp)
 
@@ -300,7 +304,7 @@ func TestAttributes_FilterMetricsByNameStrict(t *testing.T) {
 		Resources: []filterconfig.Attribute{{Key: "name", Value: "dont_apply"}},
 		Config:    *createConfig(filterset.Strict),
 	}
-	mp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), cfg, consumertest.NewNop())
+	mp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
 	require.Nil(t, err)
 	require.NotNil(t, mp)
 
@@ -363,7 +367,7 @@ func TestAttributes_FilterMetricsByNameRegexp(t *testing.T) {
 		Resources: []filterconfig.Attribute{{Key: "name", Value: ".*dont_apply$"}},
 		Config:    *createConfig(filterset.Regexp),
 	}
-	mp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), cfg, consumertest.NewNop())
+	mp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
 	require.Nil(t, err)
 	require.NotNil(t, mp)
 
@@ -422,7 +426,7 @@ func TestMetricAttributes_Hash(t *testing.T) {
 		{Key: "user.authenticated", Action: attraction.HASH},
 	}
 
-	mp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), cfg, consumertest.NewNop())
+	mp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
 	require.Nil(t, err)
 	require.NotNil(t, mp)
 
@@ -479,7 +483,7 @@ func TestMetricAttributes_Convert(t *testing.T) {
 		{Key: "to.string", Action: attraction.CONVERT, ConvertedType: "string"},
 	}
 
-	tp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), cfg, consumertest.NewNop())
+	tp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
 	require.Nil(t, err)
 	require.NotNil(t, tp)
 
@@ -524,7 +528,7 @@ func BenchmarkAttributes_FilterMetricsByName(b *testing.B) {
 		Config:    *createConfig(filterset.Regexp),
 		Resources: []filterconfig.Attribute{{Key: "name", Value: "^apply.*"}},
 	}
-	mp, err := factory.CreateMetricsProcessor(context.Background(), componenttest.NewNopProcessorCreateSettings(), cfg, consumertest.NewNop())
+	mp, err := factory.CreateMetricsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
 	require.NoError(b, err)
 	require.NotNil(b, mp)
 

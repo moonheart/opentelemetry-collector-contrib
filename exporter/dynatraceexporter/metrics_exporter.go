@@ -19,7 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -28,6 +28,7 @@ import (
 	"github.com/dynatrace-oss/dynatrace-metric-utils-go/metric/dimensions"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
+	exp "go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 
@@ -42,8 +43,8 @@ const (
 )
 
 // NewExporter exports to a Dynatrace Metrics v2 API
-func newMetricsExporter(params component.ExporterCreateSettings, cfg *config.Config) *exporter {
-	confDefaultDims := []dimensions.Dimension{}
+func newMetricsExporter(params exp.CreateSettings, cfg *config.Config) *exporter {
+	var confDefaultDims []dimensions.Dimension
 	for key, value := range cfg.DefaultDimensions {
 		confDefaultDims = append(confDefaultDims, dimensions.NewDimension(key, value))
 	}
@@ -82,7 +83,7 @@ type exporter struct {
 
 // for backwards-compatibility with deprecated `Tags` config option
 func dimensionsFromTags(tags []string) dimensions.NormalizedDimensionList {
-	dims := []dimensions.Dimension{}
+	var dims []dimensions.Dimension
 	for _, tag := range tags {
 		parts := strings.SplitN(tag, "=", 2)
 		if len(parts) == 2 {
@@ -120,7 +121,7 @@ func (e *exporter) PushMetricsData(ctx context.Context, md pmetric.Metrics) erro
 }
 
 func (e *exporter) serializeMetrics(md pmetric.Metrics) []string {
-	lines := make([]string, 0)
+	var lines []string
 
 	resourceMetrics := md.ResourceMetrics()
 
@@ -139,7 +140,7 @@ func (e *exporter) serializeMetrics(md pmetric.Metrics) []string {
 					e.settings.Logger.Warn(
 						"failed to serialize",
 						zap.String("name", metric.Name()),
-						zap.String("data-type", metric.DataType().String()),
+						zap.String("data-type", metric.Type().String()),
 						zap.Error(err),
 					)
 				}
@@ -150,7 +151,7 @@ func (e *exporter) serializeMetrics(md pmetric.Metrics) []string {
 				e.settings.Logger.Debug(
 					"Serialized metric data",
 					zap.String("name", metric.Name()),
-					zap.String("data-type", metric.DataType().String()),
+					zap.String("data-type", metric.Type().String()),
 					zap.Int("data-len", len(metricLines)),
 				)
 			}
@@ -225,7 +226,7 @@ func (e *exporter) sendBatch(ctx context.Context, lines []string) error {
 
 	if resp.StatusCode == http.StatusBadRequest {
 		// At least some metrics were not accepted
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			// if the response cannot be read, do not retry the batch as it may have been successful
 			e.settings.Logger.Error("Failed to read response from Dynatrace", zap.Error(err))

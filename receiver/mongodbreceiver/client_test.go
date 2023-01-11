@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package mongodbreceiver // import "github.com/open-telemetry/opentelemetry-colle
 import (
 	"context"
 	"errors"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/go-version"
@@ -276,7 +276,7 @@ func loadTopAsMap() (bson.M, error) {
 }
 
 func loadIndexStatsAsMap(collectionName string) ([]bson.M, error) {
-	indexStats := []bson.M{}
+	var indexStats []bson.M
 	switch collectionName {
 	case "products":
 		indexStats0, _ := loadTestFileAsMap("./testdata/productsIndexStats0.json")
@@ -286,6 +286,9 @@ func loadIndexStatsAsMap(collectionName string) ([]bson.M, error) {
 		indexStats1, _ := loadTestFileAsMap("./testdata/ordersIndexStats1.json")
 		indexStats2, _ := loadTestFileAsMap("./testdata/ordersIndexStats2.json")
 		indexStats = append(indexStats, indexStats0, indexStats1, indexStats2)
+	case "error":
+		indexStatsError, _ := loadTestFileAsMap("./testdata/indexStatsError.json")
+		indexStats = append(indexStats, indexStatsError)
 	default:
 		return nil, errors.New("failed to load index stats from an unknown collection name")
 	}
@@ -300,9 +303,13 @@ func loadAdminStatusAsMap() (bson.M, error) {
 	return loadTestFileAsMap("./testdata/admin.json")
 }
 
+func loadOnlyStorageEngineAsMap() (bson.M, error) {
+	return loadTestFileAsMap("./testdata/only_storage_engine.json")
+}
+
 func loadTestFile(filePath string) (bson.D, error) {
 	var doc bson.D
-	testFile, err := ioutil.ReadFile(filePath)
+	testFile, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +322,7 @@ func loadTestFile(filePath string) (bson.D, error) {
 
 func loadTestFileAsMap(filePath string) (bson.M, error) {
 	var doc bson.M
-	testFile, err := ioutil.ReadFile(filePath)
+	testFile, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}

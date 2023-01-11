@@ -25,20 +25,13 @@ import (
 type MetricIdentity struct {
 	Resource               pcommon.Resource
 	InstrumentationLibrary pcommon.InstrumentationScope
-	MetricDataType         pmetric.MetricDataType
+	MetricType             pmetric.MetricType
 	MetricIsMonotonic      bool
 	MetricName             string
 	MetricUnit             string
 	StartTimestamp         pcommon.Timestamp
 	Attributes             pcommon.Map
 	MetricValueType        pmetric.NumberDataPointValueType
-	MetricField            string
-}
-
-type HistogramIdentities struct {
-	CountIdentity    MetricIdentity
-	SumIdentity      MetricIdentity
-	BucketIdentities []MetricIdentity
 }
 
 const A = int32('A')
@@ -46,10 +39,11 @@ const SEP = byte(0x1E)
 const SEPSTR = string(SEP)
 
 func (mi *MetricIdentity) Write(b *bytes.Buffer) {
-	b.WriteRune(A + int32(mi.MetricDataType))
+	b.WriteRune(A + int32(mi.MetricType))
 	b.WriteByte(SEP)
 	b.WriteRune(A + int32(mi.MetricValueType))
-	mi.Resource.Attributes().Sort().Range(func(k string, v pcommon.Value) bool {
+	mi.Resource.Attributes().Sort()
+	mi.Resource.Attributes().Range(func(k string, v pcommon.Value) bool {
 		b.WriteByte(SEP)
 		b.WriteString(k)
 		b.WriteByte(':')
@@ -73,7 +67,8 @@ func (mi *MetricIdentity) Write(b *bytes.Buffer) {
 	b.WriteByte(SEP)
 	b.WriteString(mi.MetricUnit)
 
-	mi.Attributes.Sort().Range(func(k string, v pcommon.Value) bool {
+	mi.Attributes.Sort()
+	mi.Attributes.Range(func(k string, v pcommon.Value) bool {
 		b.WriteByte(SEP)
 		b.WriteString(k)
 		b.WriteByte(':')
@@ -82,11 +77,6 @@ func (mi *MetricIdentity) Write(b *bytes.Buffer) {
 	})
 	b.WriteByte(SEP)
 	b.WriteString(strconv.FormatInt(int64(mi.StartTimestamp), 36))
-
-	if mi.MetricField != "" {
-		b.WriteByte(SEP)
-		b.WriteString(mi.MetricField)
-	}
 }
 
 func (mi *MetricIdentity) IsFloatVal() bool {
@@ -94,5 +84,5 @@ func (mi *MetricIdentity) IsFloatVal() bool {
 }
 
 func (mi *MetricIdentity) IsSupportedMetricType() bool {
-	return mi.MetricDataType == pmetric.MetricDataTypeSum || mi.MetricDataType == pmetric.MetricDataTypeHistogram
+	return mi.MetricType == pmetric.MetricTypeSum || mi.MetricType == pmetric.MetricTypeHistogram
 }

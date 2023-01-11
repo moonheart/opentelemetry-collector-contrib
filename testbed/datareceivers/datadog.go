@@ -16,9 +16,10 @@ package datareceivers // import "github.com/open-telemetry/opentelemetry-collect
 
 import (
 	"context"
-
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/receivertest"
+
 	"go.opentelemetry.io/collector/consumer"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/datadogreceiver"
@@ -28,7 +29,7 @@ import (
 // datadogDataReceiver implements Datadog v3/v4/v5 format receiver.
 type datadogDataReceiver struct {
 	testbed.DataReceiverBase
-	receiver component.TracesReceiver
+	receiver receiver.Traces
 }
 
 // NewDataDogDataReceiver creates a new DD DataReceiver that will listen on the specified port after Start
@@ -42,7 +43,7 @@ func (dd *datadogDataReceiver) Start(tc consumer.Traces, _ consumer.Metrics, _ c
 	cfg := factory.CreateDefaultConfig().(*datadogreceiver.Config)
 	cfg.Endpoint = "0.0.0.0:8126"
 
-	set := componenttest.NewNopReceiverCreateSettings()
+	set := receivertest.NewNopCreateSettings()
 	var err error
 	dd.receiver, err = factory.CreateTracesReceiver(context.Background(), set, cfg, tc)
 
@@ -50,7 +51,7 @@ func (dd *datadogDataReceiver) Start(tc consumer.Traces, _ consumer.Metrics, _ c
 		return err
 	}
 
-	return dd.receiver.Start(context.Background(), dd)
+	return dd.receiver.Start(context.Background(), componenttest.NewNopHost())
 }
 
 func (dd *datadogDataReceiver) Stop() error {

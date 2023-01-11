@@ -15,6 +15,7 @@
 package prometheusexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter"
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sort"
 
@@ -60,7 +61,7 @@ func newCollector(config *Config, logger *zap.Logger) *collector {
 func (c *collector) Describe(_ chan<- *prometheus.Desc) {}
 
 /*
-	Processing
+Processing
 */
 func (c *collector) processMetrics(rm pmetric.ResourceMetrics) (n int) {
 	return c.accumulator.Accumulate(rm)
@@ -69,14 +70,14 @@ func (c *collector) processMetrics(rm pmetric.ResourceMetrics) (n int) {
 var errUnknownMetricType = fmt.Errorf("unknown metric type")
 
 func (c *collector) convertMetric(metric pmetric.Metric, resourceAttrs pcommon.Map) (prometheus.Metric, error) {
-	switch metric.DataType() {
-	case pmetric.MetricDataTypeGauge:
+	switch metric.Type() {
+	case pmetric.MetricTypeGauge:
 		return c.convertGauge(metric, resourceAttrs)
-	case pmetric.MetricDataTypeSum:
+	case pmetric.MetricTypeSum:
 		return c.convertSum(metric, resourceAttrs)
-	case pmetric.MetricDataTypeHistogram:
+	case pmetric.MetricTypeHistogram:
 		return c.convertDoubleHistogram(metric, resourceAttrs)
-	case pmetric.MetricDataTypeSummary:
+	case pmetric.MetricTypeSummary:
 		return c.convertSummary(metric, resourceAttrs)
 	}
 
@@ -93,19 +94,13 @@ func (c *collector) getMetricMetadata(metric pmetric.Metric, attributes pcommon.
 		return true
 	})
 
-	// Map service.name + service.namespace to job
-	if serviceName, ok := resourceAttrs.Get(conventions.AttributeServiceName); ok {
-		val := serviceName.AsString()
-		if serviceNamespace, ok := resourceAttrs.Get(conventions.AttributeServiceNamespace); ok {
-			val = fmt.Sprintf("%s/%s", serviceNamespace.AsString(), val)
-		}
+	if job, ok := extractJob(resourceAttrs); ok {
 		keys = append(keys, model.JobLabel)
-		values = append(values, val)
+		values = append(values, job)
 	}
-	// Map service.instance.id to instance
-	if instance, ok := resourceAttrs.Get(conventions.AttributeServiceInstanceID); ok {
+	if instance, ok := extractInstance(resourceAttrs); ok {
 		keys = append(keys, model.InstanceLabel)
-		values = append(values, instance.AsString())
+		values = append(values, instance)
 	}
 
 	return prometheus.NewDesc(
@@ -123,9 +118,9 @@ func (c *collector) convertGauge(metric pmetric.Metric, resourceAttrs pcommon.Ma
 	var value float64
 	switch ip.ValueType() {
 	case pmetric.NumberDataPointValueTypeInt:
-		value = float64(ip.IntVal())
+		value = float64(ip.IntValue())
 	case pmetric.NumberDataPointValueTypeDouble:
-		value = ip.DoubleVal()
+		value = ip.DoubleValue()
 	}
 	m, err := prometheus.NewConstMetric(desc, prometheus.GaugeValue, value, attributes...)
 	if err != nil {
@@ -150,9 +145,9 @@ func (c *collector) convertSum(metric pmetric.Metric, resourceAttrs pcommon.Map)
 	var value float64
 	switch ip.ValueType() {
 	case pmetric.NumberDataPointValueTypeInt:
-		value = float64(ip.IntVal())
+		value = float64(ip.IntValue())
 	case pmetric.NumberDataPointValueTypeDouble:
-		value = ip.DoubleVal()
+		value = ip.DoubleValue()
 	}
 	m, err := prometheus.NewConstMetric(desc, metricType, value, attributes...)
 	if err != nil {
@@ -217,9 +212,38 @@ func (c *collector) convertDoubleHistogram(metric pmetric.Metric, resourceAttrs 
 		points[bucket] = cumCount
 	}
 
+	arrLen := ip.Exemplars().Len()
+	exemplars := make([]prometheus.Exemplar, arrLen)
+
+	for i := 0; i < arrLen; i++ {
+		e := ip.Exemplars().At(i)
+		exemplarLabels := make(prometheus.Labels, 0)
+
+		if traceID := e.TraceID(); !traceID.IsEmpty() {
+			exemplarLabels["trace_id"] = hex.EncodeToString(traceID[:])
+		}
+
+		if spanID := e.SpanID(); !spanID.IsEmpty() {
+			exemplarLabels["span_id"] = hex.EncodeToString(spanID[:])
+		}
+
+		exemplars[i] = prometheus.Exemplar{
+			Value:     e.DoubleValue(),
+			Labels:    exemplarLabels,
+			Timestamp: e.Timestamp().AsTime(),
+		}
+	}
+
 	m, err := prometheus.NewConstHistogram(desc, ip.Count(), ip.Sum(), points, attributes...)
 	if err != nil {
 		return nil, err
+	}
+
+	if arrLen > 0 {
+		m, err = prometheus.NewMetricWithExemplars(m, exemplars...)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if c.sendTimestamps {
@@ -240,8 +264,8 @@ func (c *collector) createTargetInfoMetrics(resourceAttrs []pcommon.Map) ([]prom
 		if sig == "" {
 			continue
 		}
-		if _, ok := seenResource[resourceSignature(attrs)]; !ok {
-			seenResource[resourceSignature(attrs)] = struct{}{}
+		if _, ok := seenResource[sig]; !ok {
+			seenResource[sig] = struct{}{}
 			deduplicatedResourceAttrs = append(deduplicatedResourceAttrs, attrs)
 		}
 	}
@@ -276,16 +300,12 @@ func (c *collector) createTargetInfoMetrics(resourceAttrs []pcommon.Map) ([]prom
 		})
 
 		// Map service.name + service.namespace to job
-		if serviceName, ok := rAttributes.Get(conventions.AttributeServiceName); ok {
-			val := serviceName.AsString()
-			if serviceNamespace, ok := rAttributes.Get(conventions.AttributeServiceNamespace); ok {
-				val = fmt.Sprintf("%s/%s", serviceNamespace.AsString(), val)
-			}
-			labels[model.JobLabel] = val
+		if job, ok := extractJob(rAttributes); ok {
+			labels[model.JobLabel] = job
 		}
 		// Map service.instance.id to instance
-		if instance, ok := rAttributes.Get(conventions.AttributeServiceInstanceID); ok {
-			labels[model.InstanceLabel] = instance.AsString()
+		if instance, ok := extractInstance(rAttributes); ok {
+			labels[model.InstanceLabel] = instance
 		}
 
 		name := targetMetricName
@@ -317,7 +337,7 @@ func (c *collector) createTargetInfoMetrics(resourceAttrs []pcommon.Map) ([]prom
 }
 
 /*
-	Reporting
+Reporting
 */
 func (c *collector) Collect(ch chan<- prometheus.Metric) {
 	c.logger.Debug("collect called")
@@ -346,27 +366,4 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 		ch <- m
 		c.logger.Debug(fmt.Sprintf("metric served: %s", m.Desc().String()))
 	}
-}
-
-func resourceSignature(attributes pcommon.Map) string {
-	job := ""
-	instance := ""
-
-	// Map service.name + service.namespace to job
-	if serviceName, ok := attributes.Get(conventions.AttributeServiceName); ok {
-		job = serviceName.AsString()
-		if serviceNamespace, ok := attributes.Get(conventions.AttributeServiceNamespace); ok {
-			job = fmt.Sprintf("%s/%s", serviceNamespace.AsString(), job)
-		}
-	}
-	// Map service.instance.id to instance
-	if inst, ok := attributes.Get(conventions.AttributeServiceInstanceID); ok {
-		instance = inst.AsString()
-	}
-
-	if job == "" && instance == "" {
-		return ""
-	}
-
-	return job + separatorString + instance
 }

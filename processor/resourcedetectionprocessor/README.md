@@ -88,6 +88,11 @@ Queries the Docker daemon to retrieve the following resource attributes from the
 You need to mount the Docker socket (`/var/run/docker.sock` on Linux) to contact the Docker daemon.
 Docker detection does not work on macOS.
 
+### Heroku dyno id
+
+In a Heroku application, the [dyno id](https://devcenter.heroku.com/articles/dyno-metadata) is the identifier of the virtualized environment ("dyno") where the application runs.
+
+
 Example:
 
 ```yaml
@@ -161,12 +166,12 @@ EC2 custom configuration example:
 processors:
   resourcedetection/ec2:
     detectors: ["ec2"]
-      ec2:
-        # A list of regex's to match tag keys to add as resource attributes can be specified
-        tags:
-          - ^tag1$
-          - ^tag2$
-          - ^label.*$
+    ec2:
+      # A list of regex's to match tag keys to add as resource attributes can be specified
+      tags:
+        - ^tag1$
+        - ^tag2$
+        - ^label.*$
 ```
 
 If you are using a proxy server on your EC2 instance, it's important that you exempt requests for instance metadata as [described in the AWS cli user guide](https://github.com/awsdocs/aws-cli-user-guide/blob/a2393582590b64bd2a1d9978af15b350e1f9eb8e/doc_source/cli-configure-proxy.md#using-a-proxy-on-amazon-ec2-instances). Failing to do so can result in proxied or missing instance data.
@@ -290,10 +295,31 @@ processors:
     override: false
 ```
 
+### Heroku
+
+** You must first enable the [Heroku metadata feature](https://devcenter.heroku.com/articles/dyno-metadata) on the application **
+
+Queries [Heroku metadata](https://devcenter.heroku.com/articles/dyno-metadata) to retrieve the following resource attributes:
+
+* heroku.release.version (identifier for the current release)
+* heroku.release.creation_timestamp (time and date the release was created)
+* heroku.release.commit (commit hash for the current release)
+* heroku.app.name (application name)
+* heroku.app.id (unique identifier for the application)
+* heroku.dyno.id (dyno identifier. Used as host name)
+
+```yaml
+processors:
+  resourcedetection/heroku:
+    detectors: [env, heroku]
+    timeout: 2s
+    override: false
+```
+
 ## Configuration
 
 ```yaml
-# a list of resource detectors to run, valid options are: "env", "system", "gce", "gke", "ec2", "ecs", "elastic_beanstalk", "eks", "azure"
+# a list of resource detectors to run, valid options are: "env", "system", "gce", "gke", "ec2", "ecs", "elastic_beanstalk", "eks", "azure", "heroku"
 detectors: [ <string> ]
 # determines if existing resource attributes should be overridden or preserved, defaults to true
 override: <bool>

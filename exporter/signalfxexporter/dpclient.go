@@ -19,7 +19,6 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -42,7 +41,7 @@ type sfxClientBase struct {
 	zippers   sync.Pool
 }
 
-var metricsMarshaler = pmetric.NewJSONMarshaler()
+var metricsMarshaler = &pmetric.JSONMarshaler{}
 
 // avoid attempting to compress things that fit into a single ethernet frame
 func (s *sfxClientBase) getReader(b []byte) (io.Reader, bool, error) {
@@ -138,7 +137,7 @@ func (s *sfxDPClient) pushMetricsDataForToken(ctx context.Context, sfxDataPoints
 	}
 
 	defer func() {
-		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}()
 
@@ -147,27 +146,6 @@ func (s *sfxDPClient) pushMetricsDataForToken(ctx context.Context, sfxDataPoints
 		return len(sfxDataPoints), err
 	}
 	return 0, nil
-}
-
-func buildHeaders(config *Config) map[string]string {
-	headers := map[string]string{
-		"Connection":   "keep-alive",
-		"Content-Type": "application/x-protobuf",
-		"User-Agent":   "OpenTelemetry-Collector SignalFx Exporter/v0.0.1",
-	}
-
-	if config.AccessToken != "" {
-		headers[splunk.SFxAccessTokenHeader] = config.AccessToken
-	}
-
-	// Add any custom headers from the config. They will override the pre-defined
-	// ones above in case of conflict, but, not the content encoding one since
-	// the latter one is defined according to the payload.
-	for k, v := range config.Headers {
-		headers[k] = v
-	}
-
-	return headers
 }
 
 func (s *sfxDPClient) encodeBody(dps []*sfxpb.DataPoint) (bodyReader io.Reader, compressed bool, err error) {
@@ -189,7 +167,7 @@ func (s *sfxDPClient) retrieveAccessToken(md pmetric.ResourceMetrics) string {
 
 	attrs := md.Resource().Attributes()
 	if accessToken, ok := attrs.Get(splunk.SFxAccessTokenLabel); ok {
-		return accessToken.StringVal()
+		return accessToken.Str()
 	}
 	return ""
 }

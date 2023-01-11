@@ -17,15 +17,23 @@ package spanmetricsprocessor // import "github.com/open-telemetry/opentelemetry-
 import (
 	"time"
 
-	"go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/featuregate"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.opentelemetry.io/collector/service/featuregate"
 )
 
 const (
-	delta      = "AGGREGATION_TEMPORALITY_DELTA"
-	cumulative = "AGGREGATION_TEMPORALITY_CUMULATIVE"
+	delta                  = "AGGREGATION_TEMPORALITY_DELTA"
+	cumulative             = "AGGREGATION_TEMPORALITY_CUMULATIVE"
+	dropSanitizationGateID = "processor.spanmetrics.PermissiveLabelSanitization"
 )
+
+func init() {
+	featuregate.GetRegistry().MustRegisterID(
+		dropSanitizationGateID,
+		featuregate.StageAlpha,
+		featuregate.WithRegisterDescription("Controls whether to change labels starting with '_' to 'key_'"),
+	)
+}
 
 // Dimension defines the dimension name and optional default value if the Dimension is missing from a span attribute.
 type Dimension struct {
@@ -35,7 +43,6 @@ type Dimension struct {
 
 // Config defines the configuration options for spanmetricsprocessor.
 type Config struct {
-	config.ProcessorSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct
 
 	// MetricsExporter is the name of the metrics exporter to use to ship metrics.
 	MetricsExporter string `mapstructure:"metrics_exporter"`
@@ -64,17 +71,11 @@ type Config struct {
 	skipSanitizeLabel bool
 }
 
-var dropSanitizationGate = featuregate.Gate{
-	ID:          "processor.spanmetrics.PermissiveLabelSanitization",
-	Enabled:     false,
-	Description: "Controls whether to change labels starting with '_' to 'key_'",
-}
-
-// GetAggregationTemporality converts the string value given in the config into a MetricAggregationTemporality.
+// GetAggregationTemporality converts the string value given in the config into a AggregationTemporality.
 // Returns cumulative, unless delta is correctly specified.
-func (c Config) GetAggregationTemporality() pmetric.MetricAggregationTemporality {
+func (c Config) GetAggregationTemporality() pmetric.AggregationTemporality {
 	if c.AggregationTemporality == delta {
-		return pmetric.MetricAggregationTemporalityDelta
+		return pmetric.AggregationTemporalityDelta
 	}
-	return pmetric.MetricAggregationTemporalityCumulative
+	return pmetric.AggregationTemporalityCumulative
 }

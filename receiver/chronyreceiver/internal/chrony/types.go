@@ -9,7 +9,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -147,7 +147,9 @@ type replyTrackingContent struct {
 }
 
 // newTrackingData is simplified implementation of:
-//   https://github.com/facebook/time/blob/cdd8191cdec2aaa46ee72aa28cf5777c9d6f898b/ntp/chrony/packet.go#L695
+//
+//	https://github.com/facebook/time/blob/cdd8191cdec2aaa46ee72aa28cf5777c9d6f898b/ntp/chrony/packet.go#L695
+//
 // this client doesn't perform any other actions and due to the logrus logger being part of that code path,
 // it was simpler to port the logic here and reference the original.
 func newTrackingData(data []uint8) (*Tracking, error) {

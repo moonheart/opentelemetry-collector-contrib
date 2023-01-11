@@ -24,6 +24,8 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/traceutil"
 )
 
 // HumioLink represents a relation between two spans
@@ -174,21 +176,21 @@ func (e *humioTracesExporter) spanToHumioEvent(span ptrace.Span, inst pcommon.In
 	if sName, ok := res.Attributes().Get(conventions.AttributeServiceName); ok {
 		// No need to store the service name in two places
 		delete(attr, conventions.AttributeServiceName)
-		serviceName = sName.StringVal()
+		serviceName = sName.Str()
 	}
 
 	return &HumioStructuredEvent{
 		Timestamp: span.StartTimestamp().AsTime(),
 		AsUnix:    e.cfg.Traces.UnixTimestamps,
 		Attributes: &HumioSpan{
-			TraceID:           span.TraceID().HexString(),
-			SpanID:            span.SpanID().HexString(),
-			ParentSpanID:      span.ParentSpanID().HexString(),
+			TraceID:           traceutil.TraceIDToHexOrEmptyString(span.TraceID()),
+			SpanID:            traceutil.SpanIDToHexOrEmptyString(span.SpanID()),
+			ParentSpanID:      traceutil.SpanIDToHexOrEmptyString(span.ParentSpanID()),
 			Name:              span.Name(),
-			Kind:              span.Kind().String(),
+			Kind:              traceutil.SpanKindStr(span.Kind()),
 			Start:             span.StartTimestamp().AsTime().UnixNano(),
 			End:               span.EndTimestamp().AsTime().UnixNano(),
-			StatusCode:        span.Status().Code().String(),
+			StatusCode:        traceutil.StatusCodeStr(span.Status().Code()),
 			StatusDescription: span.Status().Message(),
 			ServiceName:       serviceName,
 			Links:             toHumioLinks(span.Links()),
@@ -202,9 +204,9 @@ func toHumioLinks(pLinks ptrace.SpanLinkSlice) []*HumioLink {
 	for i := 0; i < pLinks.Len(); i++ {
 		link := pLinks.At(i)
 		links = append(links, &HumioLink{
-			TraceID:    link.TraceID().HexString(),
-			SpanID:     link.SpanID().HexString(),
-			TraceState: string(link.TraceState()),
+			TraceID:    traceutil.TraceIDToHexOrEmptyString(link.TraceID()),
+			SpanID:     traceutil.SpanIDToHexOrEmptyString(link.SpanID()),
+			TraceState: link.TraceState().AsRaw(),
 		})
 	}
 	return links
@@ -223,18 +225,18 @@ func toHumioAttributes(attrMaps ...pcommon.Map) map[string]interface{} {
 
 func toHumioAttributeValue(rawVal pcommon.Value) interface{} {
 	switch rawVal.Type() {
-	case pcommon.ValueTypeString:
-		return rawVal.StringVal()
+	case pcommon.ValueTypeStr:
+		return rawVal.Str()
 	case pcommon.ValueTypeInt:
-		return rawVal.IntVal()
+		return rawVal.Int()
 	case pcommon.ValueTypeDouble:
-		return rawVal.DoubleVal()
+		return rawVal.Double()
 	case pcommon.ValueTypeBool:
-		return rawVal.BoolVal()
+		return rawVal.Bool()
 	case pcommon.ValueTypeMap:
-		return toHumioAttributes(rawVal.MapVal())
+		return toHumioAttributes(rawVal.Map())
 	case pcommon.ValueTypeSlice:
-		arrVal := rawVal.SliceVal()
+		arrVal := rawVal.Slice()
 		arr := make([]interface{}, 0, arrVal.Len())
 		for i := 0; i < arrVal.Len(); i++ {
 			arr = append(arr, toHumioAttributeValue(arrVal.At(i)))

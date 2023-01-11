@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -151,7 +150,7 @@ func (h *humioClient) sendEvents(ctx context.Context, evts interface{}, url stri
 	}
 
 	for h, v := range h.cfg.Headers {
-		req.Header.Set(h, v)
+		req.Header.Set(h, string(v))
 	}
 	req.Header.Set("authorization", "Bearer "+token)
 
@@ -161,7 +160,7 @@ func (h *humioClient) sendEvents(ctx context.Context, evts interface{}, url stri
 	}
 	// Response body needs to both be read to EOF and closed to avoid leaks
 	defer res.Body.Close()
-	_, err = io.Copy(ioutil.Discard, res.Body)
+	_, err = io.Copy(io.Discard, res.Body)
 	if err != nil {
 		return err
 	}

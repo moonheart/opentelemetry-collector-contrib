@@ -19,9 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 )
 
 func TestTokenization(t *testing.T) {
@@ -97,6 +98,64 @@ func TestTokenization(t *testing.T) {
 	}
 }
 
+func TestTokenizationTooLong(t *testing.T) {
+	fileContent := []byte("aaaaaaaaaaaaaaaaaaaaaa\naaa\n")
+	expected := [][]byte{
+		[]byte("aaaaaaaaaa"),
+		[]byte("aaaaaaaaaa"),
+		[]byte("aa"),
+		[]byte("aaa"),
+	}
+
+	f, emitChan := testReaderFactory(t)
+	f.readerConfig.maxLogSize = 10
+
+	temp := openTemp(t, t.TempDir())
+	_, err := temp.Write(fileContent)
+	require.NoError(t, err)
+
+	r, err := f.newReaderBuilder().withFile(temp).build()
+	require.NoError(t, err)
+
+	r.ReadToEnd(context.Background())
+
+	for _, expected := range expected {
+		require.Equal(t, expected, readToken(t, emitChan))
+	}
+}
+
+func TestTokenizationTooLongWithLineStartPattern(t *testing.T) {
+	fileContent := []byte("aaa2023-01-01aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2023-01-01 2 2023-01-01")
+	expected := [][]byte{
+		[]byte("aaa"),
+		[]byte("2023-01-01aaaaa"),
+		[]byte("aaaaaaaaaaaaaaa"),
+		[]byte("aaaaaaaaaaaaaaa"),
+		[]byte("aaaaa"),
+		[]byte("2023-01-01 2"),
+	}
+
+	f, emitChan := testReaderFactory(t)
+
+	mlc := helper.NewMultilineConfig()
+	mlc.LineStartPattern = `\d+-\d+-\d+`
+	f.splitterFactory = newMultilineSplitterFactory(helper.NewEncodingConfig(), helper.NewFlusherConfig(), mlc)
+	f.readerConfig.maxLogSize = 15
+
+	temp := openTemp(t, t.TempDir())
+	_, err := temp.Write(fileContent)
+	require.NoError(t, err)
+
+	r, err := f.newReaderBuilder().withFile(temp).build()
+	require.NoError(t, err)
+
+	r.ReadToEnd(context.Background())
+
+	for _, expected := range expected {
+		require.Equal(t, expected, readToken(t, emitChan))
+	}
+}
+
 func testReaderFactory(t *testing.T) (*readerFactory, chan *emitParams) {
 	emitChan := make(chan *emitParams, 100)
 	return &readerFactory{
@@ -104,11 +163,12 @@ func testReaderFactory(t *testing.T) (*readerFactory, chan *emitParams) {
 		readerConfig: &readerConfig{
 			fingerprintSize: DefaultFingerprintSize,
 			maxLogSize:      defaultMaxLogSize,
-			emit: func(_ context.Context, attrs *FileAttributes, token []byte) {
-				emitChan <- &emitParams{attrs, token}
-			},
+			emit:            testEmitFunc(emitChan),
 		},
 		fromBeginning: true,
+		splitterFactory: newMultilineSplitterFactory(
+			helper.NewEncodingConfig(), helper.NewFlusherConfig(), helper.NewMultilineConfig()),
+		encodingConfig: helper.NewEncodingConfig(),
 	}, emitChan
 }
 

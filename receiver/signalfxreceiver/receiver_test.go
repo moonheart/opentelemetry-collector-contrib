@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -36,13 +35,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
-	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
+	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/receiver/receivertest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
@@ -87,11 +87,12 @@ func Test_signalfxeceiver_New(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := newReceiver(componenttest.NewNopReceiverCreateSettings(), tt.args.config)
+			got, err := newReceiver(receivertest.NewNopCreateSettings(), tt.args.config)
+			require.NoError(t, err)
 			if tt.args.nextConsumer != nil {
 				got.RegisterMetricsConsumer(tt.args.nextConsumer)
 			}
-			err := got.Start(context.Background(), componenttest.NewNopHost())
+			err = got.Start(context.Background(), componenttest.NewNopHost())
 			assert.Equal(t, tt.wantStartErr, err)
 		})
 	}
@@ -102,7 +103,8 @@ func Test_signalfxeceiver_EndToEnd(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	cfg.Endpoint = addr
 	sink := new(consumertest.MetricsSink)
-	r := newReceiver(componenttest.NewNopReceiverCreateSettings(), *cfg)
+	r, err := newReceiver(receivertest.NewNopCreateSettings(), *cfg)
+	require.NoError(t, err)
 	r.RegisterMetricsConsumer(sink)
 
 	require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
@@ -125,49 +127,44 @@ func Test_signalfxeceiver_EndToEnd(t *testing.T) {
 	{
 		m := ilm.Metrics().AppendEmpty()
 		m.SetName("gauge_double_with_dims")
-		m.SetDataType(pmetric.MetricDataTypeGauge)
-		doublePt := m.Gauge().DataPoints().AppendEmpty()
+		doublePt := m.SetEmptyGauge().DataPoints().AppendEmpty()
 		doublePt.SetTimestamp(ts)
-		doublePt.SetDoubleVal(doubleVal)
+		doublePt.SetDoubleValue(doubleVal)
 	}
 	{
 		m := ilm.Metrics().AppendEmpty()
 		m.SetName("gauge_int_with_dims")
-		m.SetDataType(pmetric.MetricDataTypeGauge)
-		int64Pt := m.Gauge().DataPoints().AppendEmpty()
+		int64Pt := m.SetEmptyGauge().DataPoints().AppendEmpty()
 		int64Pt.SetTimestamp(ts)
-		int64Pt.SetIntVal(int64Val)
+		int64Pt.SetIntValue(int64Val)
 	}
 	{
 		m := ilm.Metrics().AppendEmpty()
 		m.SetName("cumulative_double_with_dims")
-		m.SetDataType(pmetric.MetricDataTypeSum)
-		m.Sum().SetAggregationTemporality(pmetric.MetricAggregationTemporalityCumulative)
+		m.SetEmptySum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
 		m.Sum().SetIsMonotonic(true)
 		doublePt := m.Sum().DataPoints().AppendEmpty()
 		doublePt.SetTimestamp(ts)
-		doublePt.SetDoubleVal(doubleVal)
+		doublePt.SetDoubleValue(doubleVal)
 	}
 	{
 		m := ilm.Metrics().AppendEmpty()
 		m.SetName("cumulative_int_with_dims")
-		m.SetDataType(pmetric.MetricDataTypeSum)
-		m.Sum().SetAggregationTemporality(pmetric.MetricAggregationTemporalityCumulative)
+		m.SetEmptySum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
 		m.Sum().SetIsMonotonic(true)
 		int64Pt := m.Sum().DataPoints().AppendEmpty()
 		int64Pt.SetTimestamp(ts)
-		int64Pt.SetIntVal(int64Val)
+		int64Pt.SetIntValue(int64Val)
 	}
 
 	expCfg := &signalfxexporter.Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID("signalfx")),
-		IngestURL:        "http://" + addr,
-		APIURL:           "http://localhost",
-		AccessToken:      "access_token",
+		IngestURL:   "http://" + addr,
+		APIURL:      "http://localhost",
+		AccessToken: "access_token",
 	}
 	exp, err := signalfxexporter.NewFactory().CreateMetricsExporter(
 		context.Background(),
-		componenttest.NewNopExporterCreateSettings(),
+		exportertest.NewNopCreateSettings(),
 		expCfg)
 	require.NoError(t, err)
 	require.NoError(t, exp.Start(context.Background(), componenttest.NewNopHost()))
@@ -346,7 +343,8 @@ func Test_sfxReceiver_handleReq(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sink := new(consumertest.MetricsSink)
-			rcv := newReceiver(componenttest.NewNopReceiverCreateSettings(), *config)
+			rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *config)
+			require.NoError(t, err)
 			if !tt.skipRegistration {
 				rcv.RegisterMetricsConsumer(sink)
 			}
@@ -355,7 +353,7 @@ func Test_sfxReceiver_handleReq(t *testing.T) {
 			rcv.handleDatapointReq(w, tt.req)
 
 			resp := w.Result()
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			assert.NoError(t, err)
 
 			var bodyStr string
@@ -521,7 +519,8 @@ func Test_sfxReceiver_handleEventReq(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sink := new(consumertest.LogsSink)
-			rcv := newReceiver(componenttest.NewNopReceiverCreateSettings(), *config)
+			rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *config)
+			require.NoError(t, err)
 			if !tt.skipRegistration {
 				rcv.RegisterLogsConsumer(sink)
 			}
@@ -530,7 +529,7 @@ func Test_sfxReceiver_handleEventReq(t *testing.T) {
 			rcv.handleEventReq(w, tt.req)
 
 			resp := w.Result()
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			assert.NoError(t, err)
 
 			var bodyStr string
@@ -552,7 +551,8 @@ func Test_sfxReceiver_TLS(t *testing.T) {
 		},
 	}
 	sink := new(consumertest.MetricsSink)
-	r := newReceiver(componenttest.NewNopReceiverCreateSettings(), *cfg)
+	r, err := newReceiver(receivertest.NewNopCreateSettings(), *cfg)
+	require.NoError(t, err)
 	r.RegisterMetricsConsumer(sink)
 	defer func() {
 		require.NoError(t, r.Shutdown(context.Background()))
@@ -570,16 +570,15 @@ func Test_sfxReceiver_TLS(t *testing.T) {
 	want := pmetric.NewMetrics()
 	m := want.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
 
-	m.SetDataType(pmetric.MetricDataTypeGauge)
 	m.SetName("single")
-	dps := m.Gauge().DataPoints()
+	dps := m.SetEmptyGauge().DataPoints()
 	dp := dps.AppendEmpty()
 	dp.SetTimestamp(pcommon.Timestamp(msec * 1e6))
-	dp.SetIntVal(13)
+	dp.SetIntValue(13)
 
-	dp.Attributes().InsertString("k0", "v0")
-	dp.Attributes().InsertString("k1", "v1")
-	dp.Attributes().InsertString("k2", "v2")
+	dp.Attributes().PutStr("k0", "v0")
+	dp.Attributes().PutStr("k1", "v1")
+	dp.Attributes().PutStr("k2", "v2")
 	dp.Attributes().Sort()
 
 	t.Log("Sending SignalFx metric data Request")
@@ -657,7 +656,8 @@ func Test_sfxReceiver_DatapointAccessTokenPassthrough(t *testing.T) {
 			config.AccessTokenPassthrough = tt.passthrough
 
 			sink := new(consumertest.MetricsSink)
-			rcv := newReceiver(componenttest.NewNopReceiverCreateSettings(), *config)
+			rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *config)
+			require.NoError(t, err)
 			rcv.RegisterMetricsConsumer(sink)
 
 			currentTime := time.Now().Unix() * 1e3
@@ -673,7 +673,7 @@ func Test_sfxReceiver_DatapointAccessTokenPassthrough(t *testing.T) {
 			rcv.handleDatapointReq(w, req)
 
 			resp := w.Result()
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			assert.NoError(t, err)
 
 			var bodyStr string
@@ -687,7 +687,7 @@ func Test_sfxReceiver_DatapointAccessTokenPassthrough(t *testing.T) {
 			resource := mds[0].ResourceMetrics().At(0).Resource()
 			tokenLabel := ""
 			if label, ok := resource.Attributes().Get("com.splunk.signalfx.access_token"); ok {
-				tokenLabel = label.StringVal()
+				tokenLabel = label.Str()
 			}
 
 			if tt.passthrough {
@@ -734,7 +734,8 @@ func Test_sfxReceiver_EventAccessTokenPassthrough(t *testing.T) {
 			config.AccessTokenPassthrough = tt.passthrough
 
 			sink := new(consumertest.LogsSink)
-			rcv := newReceiver(componenttest.NewNopReceiverCreateSettings(), *config)
+			rcv, err := newReceiver(receivertest.NewNopCreateSettings(), *config)
+			require.NoError(t, err)
 			rcv.RegisterLogsConsumer(sink)
 
 			currentTime := time.Now().Unix() * 1e3
@@ -750,7 +751,7 @@ func Test_sfxReceiver_EventAccessTokenPassthrough(t *testing.T) {
 			rcv.handleEventReq(w, req)
 
 			resp := w.Result()
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			assert.NoError(t, err)
 
 			var bodyStr string
@@ -764,7 +765,7 @@ func Test_sfxReceiver_EventAccessTokenPassthrough(t *testing.T) {
 
 			tokenLabel := ""
 			if accessTokenAttr, ok := got[0].ResourceLogs().At(0).Resource().Attributes().Get("com.splunk.signalfx.access_token"); ok {
-				tokenLabel = accessTokenAttr.StringVal()
+				tokenLabel = accessTokenAttr.Str()
 			}
 
 			if tt.passthrough {

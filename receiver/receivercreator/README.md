@@ -1,5 +1,11 @@
 # Receiver Creator
 
+| Status                   |                       |
+|--------------------------|-----------------------|
+| Stability                | [beta]                |
+| Supported pipeline types | logs, metrics, traces |
+| Distributions            | [contrib]             |
+
 This receiver can instantiate other receivers at runtime based on whether
 observed endpoints match a configured rule. To use the receiver creator, you
 must first configure one or more
@@ -231,14 +237,14 @@ receivers:
         # Set a resource attribute based on endpoint value.
         rule: type == "port" && port == 6379
 
-      resource_attributes:
-        # Dynamic configuration values, overwriting default attributes`
-        pod:
-          service.name: '`labels["service_name"]`'
-          app: '`labels["app"]`'
-        port:
-          service.name: '`pod.labels["service_name"]`'
-          app: '`pod.labels["app"]`'
+    resource_attributes:
+      # Dynamic configuration values, overwriting default attributes`
+      pod:
+        service.name: '`labels["service_name"]`'
+        app: '`labels["app"]`'
+      port:
+        service.name: '`pod.labels["service_name"]`'
+        app: '`pod.labels["app"]`'
   receiver_creator/2:
     # Name of the extensions to watch for endpoints to start and stop.
     watch_observers: [host_observer]
@@ -246,8 +252,8 @@ receivers:
       redis/on_host:
         # If this rule matches an instance of this receiver will be started.
         rule: type == "port" && port == 6379 && is_ipv6 == true
-      resource_attributes:
-        service.name: redis_on_host
+        resource_attributes:
+          service.name: redis_on_host
   receiver_creator/3:
     watch_observers: [k8s_observer]
     receivers:
@@ -281,3 +287,6 @@ service:
 
 The full list of settings exposed for this receiver are documented [here](./config.go)
 with detailed sample configurations [here](./testdata/config.yaml).
+
+[beta]: https://github.com/open-telemetry/opentelemetry-collector#beta
+[contrib]: https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-contrib

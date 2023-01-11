@@ -16,7 +16,7 @@ package dockerstatsreceiver
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,14 +56,13 @@ func metricsData(
 	ts pcommon.Timestamp,
 	resourceLabels map[string]string,
 	metrics ...Metric,
-) pmetric.Metrics {
+) pmetric.ResourceMetrics {
 	rLabels := mergeMaps(defaultLabels(), resourceLabels)
-	md := pmetric.NewMetrics()
-	rs := md.ResourceMetrics().AppendEmpty()
+	rs := pmetric.NewResourceMetrics()
 	rs.SetSchemaUrl(conventions.SchemaURL)
 	rsAttr := rs.Resource().Attributes()
 	for k, v := range rLabels {
-		rsAttr.UpsertString(k, v)
+		rsAttr.PutStr(k, v)
 	}
 	rsAttr.Sort()
 
@@ -77,28 +76,26 @@ func metricsData(
 		var dps pmetric.NumberDataPointSlice
 		switch m.mtype {
 		case MetricTypeCumulative:
-			mdMetric.SetDataType(pmetric.MetricDataTypeSum)
-			mdMetric.Sum().SetIsMonotonic(true)
-			mdMetric.Sum().SetAggregationTemporality(pmetric.MetricAggregationTemporalityCumulative)
+			mdMetric.SetEmptySum().SetIsMonotonic(true)
+			mdMetric.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
 			dps = mdMetric.Sum().DataPoints()
 		case MetricTypeGauge, MetricTypeDoubleGauge:
-			mdMetric.SetDataType(pmetric.MetricDataTypeGauge)
-			dps = mdMetric.Gauge().DataPoints()
+			dps = mdMetric.SetEmptyGauge().DataPoints()
 		}
 
 		for _, v := range m.values {
 			dp := dps.AppendEmpty()
 			dp.SetTimestamp(ts)
 			if m.mtype == MetricTypeDoubleGauge {
-				dp.SetDoubleVal(v.doubleValue)
+				dp.SetDoubleValue(v.doubleValue)
 			} else {
-				dp.SetIntVal(v.value)
+				dp.SetIntValue(v.value)
 			}
 			populateAttributes(dp.Attributes(), m.labelKeys, v.labelValues)
 		}
 	}
 
-	return md
+	return rs
 }
 
 func defaultLabels() map[string]string {
@@ -195,9 +192,9 @@ func assertMetricsDataEqual(
 	now pcommon.Timestamp,
 	expected []Metric,
 	labels map[string]string,
-	actual pmetric.Metrics,
+	actual pmetric.ResourceMetrics,
 ) {
-	actual.ResourceMetrics().At(0).Resource().Attributes().Sort()
+	actual.Resource().Attributes().Sort()
 	assert.Equal(t, metricsData(now, labels, expected...), actual)
 }
 
@@ -234,7 +231,7 @@ func TestZeroValueStats(t *testing.T) {
 }
 
 func statsJSON(t *testing.T) *dtypes.StatsJSON {
-	statsRaw, err := ioutil.ReadFile(filepath.Join("testdata", "stats.json"))
+	statsRaw, err := os.ReadFile(filepath.Join("testdata", "stats.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +245,7 @@ func statsJSON(t *testing.T) *dtypes.StatsJSON {
 }
 
 func containerJSON(t *testing.T) docker.Container {
-	containerRaw, err := ioutil.ReadFile(filepath.Join("testdata", "container.json"))
+	containerRaw, err := os.ReadFile(filepath.Join("testdata", "container.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,11 +36,11 @@ func toTraces(traces datadogpb.Traces, req *http.Request) ptrace.Traces {
 		for serviceName, trace := range groupByServiceName {
 			resSpans := dest.ResourceSpans().AppendEmpty()
 			resSpans.SetSchemaUrl(semconv.SchemaURL)
-			resSpans.Resource().Attributes().InsertString(semconv.AttributeServiceName, serviceName)
+			resSpans.Resource().Attributes().PutStr(semconv.AttributeServiceName, serviceName)
 
-			ils := resSpans.ScopeSpans().AppendEmpty()
-			ils.Scope().SetName("Datadog-" + req.Header.Get("Datadog-Meta-Lang"))
-			ils.Scope().SetVersion(req.Header.Get("Datadog-Meta-Tracer-Version"))
+			scopeSpans := resSpans.ScopeSpans().AppendEmpty()
+			scopeSpans.Scope().SetName("Datadog-" + req.Header.Get("Datadog-Meta-Lang"))
+			scopeSpans.Scope().SetVersion(req.Header.Get("Datadog-Meta-Tracer-Version"))
 			spans := ptrace.NewSpanSlice()
 			spans.EnsureCapacity(len(*trace))
 			for _, span := range *trace {
@@ -61,11 +61,11 @@ func toTraces(traces datadogpb.Traces, req *http.Request) ptrace.Traces {
 
 				attrs := newSpan.Attributes()
 				attrs.EnsureCapacity(len(span.GetMeta()) + 1)
-				attrs.InsertString(semconv.AttributeServiceName, span.Service)
+				attrs.PutStr(semconv.AttributeServiceName, span.Service)
 				for k, v := range span.GetMeta() {
 					k = translateDataDogKeyToOtel(k)
 					if len(k) > 0 {
-						attrs.InsertString(k, v)
+						attrs.PutStr(k, v)
 					}
 				}
 
@@ -78,7 +78,7 @@ func toTraces(traces datadogpb.Traces, req *http.Request) ptrace.Traces {
 					newSpan.SetKind(ptrace.SpanKindClient)
 				}
 			}
-			spans.MoveAndAppendTo(ils.Spans())
+			spans.MoveAndAppendTo(scopeSpans.Spans())
 
 		}
 	}
@@ -101,7 +101,7 @@ func traceGroupByServiceName(trace datadogpb.Trace) map[string]*datadogpb.Trace 
 }
 
 func translateDataDogKeyToOtel(k string) string {
-	// We dont want these
+	// We don't want these
 	if strings.HasPrefix(k, "_dd.") {
 		return ""
 	}
@@ -124,6 +124,10 @@ func translateDataDogKeyToOtel(k string) string {
 		return semconv.AttributeExceptionStacktrace
 	case "error.msg":
 		return semconv.AttributeExceptionMessage
+	case "db.type":
+		return semconv.AttributeDBSystem
+	case "db.instance":
+		return semconv.AttributeDBName
 	default:
 		return k
 	}
@@ -162,13 +166,13 @@ func uInt64ToTraceID(high, low uint64) pcommon.TraceID {
 	traceID := [16]byte{}
 	binary.BigEndian.PutUint64(traceID[:8], high)
 	binary.BigEndian.PutUint64(traceID[8:], low)
-	return pcommon.NewTraceID(traceID)
+	return traceID
 }
 
 func uInt64ToSpanID(id uint64) pcommon.SpanID {
 	spanID := [8]byte{}
 	binary.BigEndian.PutUint64(spanID[:], id)
-	return pcommon.NewSpanID(spanID)
+	return spanID
 }
 
 // decodeRequest decodes the payload in http request `req` into `dest`.

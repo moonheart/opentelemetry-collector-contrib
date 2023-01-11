@@ -17,6 +17,7 @@ package datadogreceiver // import "github.com/open-telemetry/opentelemetry-colle
 import (
 	"context"
 	"fmt"
+	"go.opentelemetry.io/collector/receiver"
 	"net/http"
 	"sync"
 
@@ -30,7 +31,7 @@ import (
 
 type datadogReceiver struct {
 	config       *Config
-	params       component.ReceiverCreateSettings
+	settings     receiver.CreateSettings
 	nextConsumer consumer.Traces
 	server       *http.Server
 	shutdownWG   sync.WaitGroup
@@ -40,24 +41,32 @@ type datadogReceiver struct {
 	stopOnce  sync.Once
 }
 
-func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, params component.ReceiverCreateSettings) (component.TracesReceiver, error) {
+func newDataDogReceiver(config *Config, nextConsumer consumer.Traces, settings receiver.CreateSettings) (*datadogReceiver, error) {
 	if nextConsumer == nil {
 		return nil, component.ErrNilNextConsumer
 	}
 
+	newReceiver, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		LongLivedCtx:           false,
+		ReceiverID:             settings.ID,
+		Transport:              "http",
+		ReceiverCreateSettings: settings})
+	if err != nil {
+		return nil, err
+	}
 	return &datadogReceiver{
-		params:       params,
+		settings:     settings,
 		config:       config,
 		nextConsumer: nextConsumer,
 		server: &http.Server{
 			ReadTimeout: config.ReadTimeout,
 			Addr:        config.HTTPServerSettings.Endpoint,
 		},
-		obs: obsreport.NewReceiver(obsreport.ReceiverSettings{LongLivedCtx: false, ReceiverID: config.ID(), Transport: "http", ReceiverCreateSettings: params}),
+		obs: newReceiver,
 	}, nil
 }
 
-func (ddr datadogReceiver) handleWithVersion(v datadogapi.Version, f func(datadogapi.Version, http.ResponseWriter, *http.Request)) http.HandlerFunc {
+func (ddr *datadogReceiver) handleWithVersion(v datadogapi.Version, f func(datadogapi.Version, http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if mediaType := getMediaType(req); mediaType == "application/msgpack" && (v == v01 || v == v02) {
 			// msgpack is only supported for versions >= v0.3

@@ -16,6 +16,7 @@ package awscloudwatchlogsexporter // import "github.com/open-telemetry/opentelem
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -24,8 +25,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
+	exp "go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -44,7 +45,7 @@ type exporter struct {
 	pusher           cwlogs.Pusher
 }
 
-func newCwLogsPusher(expConfig *Config, params component.ExporterCreateSettings) (component.LogsExporter, error) {
+func newCwLogsPusher(expConfig *Config, params exp.CreateSettings) (exp.Logs, error) {
 	if expConfig == nil {
 		return nil, errors.New("awscloudwatchlogs exporter config is nil")
 	}
@@ -58,7 +59,7 @@ func newCwLogsPusher(expConfig *Config, params component.ExporterCreateSettings)
 	}
 
 	// create CWLogs client with aws session config
-	svcStructuredLog := cwlogs.NewClient(params.Logger, awsConfig, params.BuildInfo, expConfig.LogGroupName, session)
+	svcStructuredLog := cwlogs.NewClient(params.Logger, awsConfig, params.BuildInfo, expConfig.LogGroupName, expConfig.LogRetention, session)
 	collectorIdentifier, err := uuid.NewRandom()
 
 	if err != nil {
@@ -78,15 +79,16 @@ func newCwLogsPusher(expConfig *Config, params component.ExporterCreateSettings)
 	return logsExporter, nil
 }
 
-func newCwLogsExporter(config config.Exporter, params component.ExporterCreateSettings) (component.LogsExporter, error) {
+func newCwLogsExporter(config component.Config, params exp.CreateSettings) (exp.Logs, error) {
 	expConfig := config.(*Config)
 	logsExporter, err := newCwLogsPusher(expConfig, params)
 	if err != nil {
 		return nil, err
 	}
 	return exporterhelper.NewLogsExporter(
-		config,
+		context.TODO(),
 		params,
+		config,
 		logsExporter.ConsumeLogs,
 		exporterhelper.WithQueue(expConfig.enforcedQueueSettings()),
 		exporterhelper.WithRetry(expConfig.RetrySettings),
@@ -143,7 +145,7 @@ func logsToCWLogs(logger *zap.Logger, ld plog.Logs) ([]*cloudwatchlogs.InputLogE
 	}
 
 	var dropped int
-	out := make([]*cloudwatchlogs.InputLogEvent, 0) // TODO(jbd): set a better capacity
+	var out []*cloudwatchlogs.InputLogEvent
 
 	rls := ld.ResourceLogs()
 	for i := 0; i < rls.Len(); i++ {
@@ -189,13 +191,13 @@ func logToCWLog(resourceAttrs map[string]interface{}, log plog.LogRecord) (*clou
 		SeverityNumber:         int32(log.SeverityNumber()),
 		SeverityText:           log.SeverityText(),
 		DroppedAttributesCount: log.DroppedAttributesCount(),
-		Flags:                  log.Flags(),
+		Flags:                  uint32(log.Flags()),
 	}
 	if traceID := log.TraceID(); !traceID.IsEmpty() {
-		body.TraceID = traceID.HexString()
+		body.TraceID = hex.EncodeToString(traceID[:])
 	}
 	if spanID := log.SpanID(); !spanID.IsEmpty() {
-		body.SpanID = spanID.HexString()
+		body.SpanID = hex.EncodeToString(spanID[:])
 	}
 	body.Attributes = attrsValue(log.Attributes())
 	body.Resource = resourceAttrs
@@ -225,22 +227,22 @@ func attrsValue(attrs pcommon.Map) map[string]interface{} {
 func attrValue(value pcommon.Value) interface{} {
 	switch value.Type() {
 	case pcommon.ValueTypeInt:
-		return value.IntVal()
+		return value.Int()
 	case pcommon.ValueTypeBool:
-		return value.BoolVal()
+		return value.Bool()
 	case pcommon.ValueTypeDouble:
-		return value.DoubleVal()
-	case pcommon.ValueTypeString:
-		return value.StringVal()
+		return value.Double()
+	case pcommon.ValueTypeStr:
+		return value.Str()
 	case pcommon.ValueTypeMap:
 		values := map[string]interface{}{}
-		value.MapVal().Range(func(k string, v pcommon.Value) bool {
+		value.Map().Range(func(k string, v pcommon.Value) bool {
 			values[k] = attrValue(v)
 			return true
 		})
 		return values
 	case pcommon.ValueTypeSlice:
-		arrayVal := value.SliceVal()
+		arrayVal := value.Slice()
 		values := make([]interface{}, arrayVal.Len())
 		for i := 0; i < arrayVal.Len(); i++ {
 			values[i] = attrValue(arrayVal.At(i))

@@ -18,6 +18,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/lightstep/go-expohisto/structure"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"gonum.org/v1/gonum/stat"
@@ -34,17 +35,16 @@ func buildCounterMetric(parsedMetric statsDMetric, isMonotonicCounter bool, time
 	if parsedMetric.unit != "" {
 		nm.SetUnit(parsedMetric.unit)
 	}
-	nm.SetDataType(pmetric.MetricDataTypeSum)
 
-	nm.Sum().SetAggregationTemporality(pmetric.MetricAggregationTemporalityDelta)
+	nm.SetEmptySum().SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
 	nm.Sum().SetIsMonotonic(isMonotonicCounter)
 
 	dp := nm.Sum().DataPoints().AppendEmpty()
-	dp.SetIntVal(parsedMetric.counterValue())
+	dp.SetIntValue(parsedMetric.counterValue())
 	dp.SetStartTimestamp(pcommon.NewTimestampFromTime(lastIntervalTime))
 	dp.SetTimestamp(pcommon.NewTimestampFromTime(timeNow))
 	for i := parsedMetric.description.attrs.Iter(); i.Next(); {
-		dp.Attributes().InsertString(string(i.Attribute().Key), i.Attribute().Value.AsString())
+		dp.Attributes().PutStr(string(i.Attribute().Key), i.Attribute().Value.AsString())
 	}
 
 	return ilm
@@ -57,12 +57,11 @@ func buildGaugeMetric(parsedMetric statsDMetric, timeNow time.Time) pmetric.Scop
 	if parsedMetric.unit != "" {
 		nm.SetUnit(parsedMetric.unit)
 	}
-	nm.SetDataType(pmetric.MetricDataTypeGauge)
-	dp := nm.Gauge().DataPoints().AppendEmpty()
-	dp.SetDoubleVal(parsedMetric.gaugeValue())
+	dp := nm.SetEmptyGauge().DataPoints().AppendEmpty()
+	dp.SetDoubleValue(parsedMetric.gaugeValue())
 	dp.SetTimestamp(pcommon.NewTimestampFromTime(timeNow))
 	for i := parsedMetric.description.attrs.Iter(); i.Next(); {
-		dp.Attributes().InsertString(string(i.Attribute().Key), i.Attribute().Value.AsString())
+		dp.Attributes().PutStr(string(i.Attribute().Key), i.Attribute().Value.AsString())
 	}
 
 	return ilm
@@ -71,9 +70,7 @@ func buildGaugeMetric(parsedMetric statsDMetric, timeNow time.Time) pmetric.Scop
 func buildSummaryMetric(desc statsDMetricDescription, summary summaryMetric, startTime, timeNow time.Time, percentiles []float64, ilm pmetric.ScopeMetrics) {
 	nm := ilm.Metrics().AppendEmpty()
 	nm.SetName(desc.name)
-	nm.SetDataType(pmetric.MetricDataTypeSummary)
-
-	dp := nm.Summary().DataPoints().AppendEmpty()
+	dp := nm.SetEmptySummary().DataPoints().AppendEmpty()
 
 	count := float64(0)
 	sum := float64(0)
@@ -90,7 +87,7 @@ func buildSummaryMetric(desc statsDMetricDescription, summary summaryMetric, sta
 	dp.SetStartTimestamp(pcommon.NewTimestampFromTime(startTime))
 	dp.SetTimestamp(pcommon.NewTimestampFromTime(timeNow))
 	for i := desc.attrs.Iter(); i.Next(); {
-		dp.Attributes().InsertString(string(i.Attribute().Key), i.Attribute().Value.AsString())
+		dp.Attributes().PutStr(string(i.Attribute().Key), i.Attribute().Value.AsString())
 	}
 
 	sort.Sort(dualSorter{summary.points, summary.weights})
@@ -99,6 +96,51 @@ func buildSummaryMetric(desc statsDMetricDescription, summary summaryMetric, sta
 		eachQuantile := dp.QuantileValues().AppendEmpty()
 		eachQuantile.SetQuantile(pct / 100)
 		eachQuantile.SetValue(stat.Quantile(pct/100, stat.Empirical, summary.points, summary.weights))
+	}
+}
+
+func buildHistogramMetric(desc statsDMetricDescription, histogram histogramMetric, startTime, timeNow time.Time, ilm pmetric.ScopeMetrics) {
+	nm := ilm.Metrics().AppendEmpty()
+	nm.SetName(desc.name)
+	expo := nm.SetEmptyExponentialHistogram()
+	expo.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+
+	dp := expo.DataPoints().AppendEmpty()
+	agg := histogram.agg
+
+	dp.SetCount(agg.Count())
+	dp.SetSum(agg.Sum())
+	if agg.Count() != 0 {
+		dp.SetMin(agg.Min())
+		dp.SetMax(agg.Max())
+	}
+
+	dp.SetStartTimestamp(pcommon.NewTimestampFromTime(startTime))
+	dp.SetTimestamp(pcommon.NewTimestampFromTime(timeNow))
+
+	for i := desc.attrs.Iter(); i.Next(); {
+		dp.Attributes().PutStr(string(i.Attribute().Key), i.Attribute().Value.AsString())
+	}
+
+	dp.SetZeroCount(agg.ZeroCount())
+	dp.SetScale(agg.Scale())
+
+	for _, half := range []struct {
+		inFunc  func() *structure.Buckets
+		outFunc func() pmetric.ExponentialHistogramDataPointBuckets
+	}{
+		{agg.Positive, dp.Positive},
+		{agg.Negative, dp.Negative},
+	} {
+		in := half.inFunc()
+		out := half.outFunc()
+		out.SetOffset(in.Offset())
+
+		out.BucketCounts().EnsureCapacity(int(in.Len()))
+
+		for i := uint32(0); i < in.Len(); i++ {
+			out.BucketCounts().Append(in.At(i))
+		}
 	}
 }
 
@@ -120,12 +162,12 @@ func (s statsDMetric) gaugeValue() float64 {
 	return s.asFloat
 }
 
-func (s statsDMetric) summaryValue() summaryRaw {
+func (s statsDMetric) sampleValue() sampleValue {
 	count := 1.0
 	if 0 < s.sampleRate && s.sampleRate < 1 {
 		count /= s.sampleRate
 	}
-	return summaryRaw{
+	return sampleValue{
 		value: s.asFloat,
 		count: count,
 	}

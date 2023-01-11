@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/traceutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/splunk"
 )
 
@@ -34,7 +35,7 @@ type hecLink struct {
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 	TraceID    string                 `json:"trace_id"`
 	SpanID     string                 `json:"span_id"`
-	TraceState ptrace.TraceState      `json:"trace_state"`
+	TraceState string                 `json:"trace_state"`
 }
 
 // hecSpanStatus is a data structure holding the status of a span to export explicitly to Splunk HEC.
@@ -72,13 +73,13 @@ func mapSpanToSplunkEvent(resource pcommon.Resource, span ptrace.Span, config *C
 	resource.Attributes().Range(func(k string, v pcommon.Value) bool {
 		switch k {
 		case hostKey:
-			host = v.StringVal()
+			host = v.Str()
 		case sourceKey:
-			source = v.StringVal()
+			source = v.Str()
 		case sourceTypeKey:
-			sourceType = v.StringVal()
+			sourceType = v.Str()
 		case indexKey:
-			index = v.StringVal()
+			index = v.Str()
 		case splunk.HecTokenLabel:
 			// ignore
 		default:
@@ -117,9 +118,9 @@ func toHecSpan(logger *zap.Logger, span ptrace.Span) hecSpan {
 		})
 		links[i] = hecLink{
 			Attributes: linkAttributes,
-			TraceID:    link.TraceID().HexString(),
-			SpanID:     link.SpanID().HexString(),
-			TraceState: link.TraceState(),
+			TraceID:    traceutil.TraceIDToHexOrEmptyString(link.TraceID()),
+			SpanID:     traceutil.SpanIDToHexOrEmptyString(link.SpanID()),
+			TraceState: link.TraceState().AsRaw(),
 		}
 	}
 	events := make([]hecEvent, span.Events().Len())
@@ -138,17 +139,17 @@ func toHecSpan(logger *zap.Logger, span ptrace.Span) hecSpan {
 	}
 	status := hecSpanStatus{
 		Message: span.Status().Message(),
-		Code:    span.Status().Code().String(),
+		Code:    traceutil.StatusCodeStr(span.Status().Code()),
 	}
 	return hecSpan{
-		TraceID:    span.TraceID().HexString(),
-		SpanID:     span.SpanID().HexString(),
-		ParentSpan: span.ParentSpanID().HexString(),
+		TraceID:    traceutil.TraceIDToHexOrEmptyString(span.TraceID()),
+		SpanID:     traceutil.SpanIDToHexOrEmptyString(span.SpanID()),
+		ParentSpan: traceutil.SpanIDToHexOrEmptyString(span.ParentSpanID()),
 		Name:       span.Name(),
 		Attributes: attributes,
 		StartTime:  span.StartTimestamp(),
 		EndTime:    span.EndTimestamp(),
-		Kind:       span.Kind().String(),
+		Kind:       traceutil.SpanKindStr(span.Kind()),
 		Status:     status,
 		Links:      links,
 		Events:     events,

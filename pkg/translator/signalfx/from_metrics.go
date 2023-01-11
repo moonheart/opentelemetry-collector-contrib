@@ -73,14 +73,14 @@ func (ft *FromTranslator) FromMetric(m pmetric.Metric, extraDimensions []*sfxpb.
 
 	mt := fromMetricTypeToMetricType(m)
 
-	switch m.DataType() {
-	case pmetric.MetricDataTypeGauge:
+	switch m.Type() {
+	case pmetric.MetricTypeGauge:
 		dps = convertNumberDataPoints(m.Gauge().DataPoints(), m.Name(), mt, extraDimensions)
-	case pmetric.MetricDataTypeSum:
+	case pmetric.MetricTypeSum:
 		dps = convertNumberDataPoints(m.Sum().DataPoints(), m.Name(), mt, extraDimensions)
-	case pmetric.MetricDataTypeHistogram:
+	case pmetric.MetricTypeHistogram:
 		dps = convertHistogram(m.Histogram().DataPoints(), m.Name(), mt, extraDimensions)
-	case pmetric.MetricDataTypeSummary:
+	case pmetric.MetricTypeSummary:
 		dps = convertSummaryDataPoints(m.Summary().DataPoints(), m.Name(), extraDimensions)
 	}
 
@@ -88,21 +88,21 @@ func (ft *FromTranslator) FromMetric(m pmetric.Metric, extraDimensions []*sfxpb.
 }
 
 func fromMetricTypeToMetricType(metric pmetric.Metric) *sfxpb.MetricType {
-	switch metric.DataType() {
-	case pmetric.MetricDataTypeGauge:
+	switch metric.Type() {
+	case pmetric.MetricTypeGauge:
 		return &sfxMetricTypeGauge
 
-	case pmetric.MetricDataTypeSum:
+	case pmetric.MetricTypeSum:
 		if !metric.Sum().IsMonotonic() {
 			return &sfxMetricTypeGauge
 		}
-		if metric.Sum().AggregationTemporality() == pmetric.MetricAggregationTemporalityDelta {
+		if metric.Sum().AggregationTemporality() == pmetric.AggregationTemporalityDelta {
 			return &sfxMetricTypeCounter
 		}
 		return &sfxMetricTypeCumulativeCounter
 
-	case pmetric.MetricDataTypeHistogram:
-		if metric.Histogram().AggregationTemporality() == pmetric.MetricAggregationTemporalityDelta {
+	case pmetric.MetricTypeHistogram:
+		if metric.Histogram().AggregationTemporality() == pmetric.AggregationTemporalityDelta {
 			return &sfxMetricTypeCounter
 		}
 		return &sfxMetricTypeCumulativeCounter
@@ -120,10 +120,10 @@ func convertNumberDataPoints(in pmetric.NumberDataPointSlice, name string, mt *s
 		dp := dps.appendPoint(name, mt, fromTimestamp(inDp.Timestamp()), attributesToDimensions(inDp.Attributes(), extraDims))
 		switch inDp.ValueType() {
 		case pmetric.NumberDataPointValueTypeInt:
-			val := inDp.IntVal()
+			val := inDp.IntValue()
 			dp.Value.IntValue = &val
 		case pmetric.NumberDataPointValueTypeDouble:
-			val := inDp.DoubleVal()
+			val := inDp.DoubleValue()
 			dp.Value.DoubleValue = &val
 		}
 	}
@@ -133,7 +133,19 @@ func convertNumberDataPoints(in pmetric.NumberDataPointSlice, name string, mt *s
 func convertHistogram(in pmetric.HistogramDataPointSlice, name string, mt *sfxpb.MetricType, extraDims []*sfxpb.Dimension) []*sfxpb.DataPoint {
 	var numDPs int
 	for i := 0; i < in.Len(); i++ {
-		numDPs += 2 + in.At(i).BucketCounts().Len()
+		histDP := in.At(i)
+		numDPs += 1 + histDP.BucketCounts().Len()
+		if histDP.HasSum() {
+			numDPs++
+		}
+
+		if histDP.HasMin() {
+			numDPs++
+		}
+
+		if histDP.HasMax() {
+			numDPs++
+		}
 	}
 	dps := newDpsBuilder(numDPs)
 
@@ -146,10 +158,25 @@ func convertHistogram(in pmetric.HistogramDataPointSlice, name string, mt *sfxpb
 		count := int64(histDP.Count())
 		countDP.Value.IntValue = &count
 
-		sumName := name + "_sum"
-		sumDP := dps.appendPoint(sumName, mt, ts, dims)
-		sum := histDP.Sum()
-		sumDP.Value.DoubleValue = &sum
+		if histDP.HasSum() {
+			sumDP := dps.appendPoint(name+"_sum", mt, ts, dims)
+			sum := histDP.Sum()
+			sumDP.Value.DoubleValue = &sum
+		}
+
+		if histDP.HasMin() {
+			// Min is always a gauge.
+			minDP := dps.appendPoint(name+"_min", &sfxMetricTypeGauge, ts, dims)
+			min := histDP.Min()
+			minDP.Value.DoubleValue = &min
+		}
+
+		if histDP.HasMax() {
+			// Max is always a gauge.
+			maxDP := dps.appendPoint(name+"_max", &sfxMetricTypeGauge, ts, dims)
+			max := histDP.Max()
+			maxDP.Value.DoubleValue = &max
+		}
 
 		bounds := histDP.ExplicitBounds()
 		counts := histDP.BucketCounts()

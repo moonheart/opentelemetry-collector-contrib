@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	rcvr "go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
 	"go.uber.org/multierr"
 
@@ -36,19 +37,19 @@ const (
 
 type receiver struct {
 	config   *Config
-	settings component.ReceiverCreateSettings
+	settings rcvr.CreateSettings
 	client   *docker.Client
 	mb       *metadata.MetricsBuilder
 }
 
-func newReceiver(set component.ReceiverCreateSettings, config *Config) *receiver {
+func newReceiver(set rcvr.CreateSettings, config *Config) *receiver {
 	if config.ProvidePerCoreCPUMetrics {
 		config.MetricsConfig.ContainerCPUUsagePercpu.Enabled = config.ProvidePerCoreCPUMetrics
 	}
 	return &receiver{
 		config:   config,
 		settings: set,
-		mb:       metadata.NewMetricsBuilder(config.MetricsConfig, set.BuildInfo),
+		mb:       metadata.NewMetricsBuilder(config.MetricsConfig, set),
 	}
 }
 
@@ -72,7 +73,7 @@ func (r *receiver) start(ctx context.Context, _ component.Host) error {
 }
 
 type result struct {
-	md  pmetric.Metrics
+	md  pmetric.ResourceMetrics
 	err error
 }
 
@@ -87,7 +88,7 @@ func (r *receiver) scrape(ctx context.Context) (pmetric.Metrics, error) {
 			defer wg.Done()
 			statsJSON, err := r.client.FetchContainerStatsAsJSON(ctx, c)
 			if err != nil {
-				results <- result{md: pmetric.Metrics{}, err: err}
+				results <- result{md: pmetric.ResourceMetrics{}, err: err}
 				return
 			}
 
@@ -108,7 +109,7 @@ func (r *receiver) scrape(ctx context.Context) (pmetric.Metrics, error) {
 			errs = multierr.Append(errs, scrapererror.NewPartialScrapeError(res.err, 0))
 			continue
 		}
-		res.md.ResourceMetrics().MoveAndAppendTo(md.ResourceMetrics())
+		res.md.MoveTo(md.ResourceMetrics().AppendEmpty())
 	}
 
 	return md, errs
