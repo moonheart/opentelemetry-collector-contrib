@@ -146,6 +146,20 @@ func decodeRequestVersion(v datadogapi.Version, req *http.Request, dest *datadog
 		if err != nil {
 			return err
 		}
+	case V07:
+		buf := getBuffer()
+		defer putBuffer(buf)
+		if _, err := io.Copy(buf, req.Body); err != nil {
+			return err
+		}
+		var tracerPayload datadogpb.TracerPayload
+		_, err := tracerPayload.UnmarshalMsg(buf.Bytes())
+		if err != nil {
+			return err
+		}
+		for _, chunk := range tracerPayload.Chunks {
+			*dest = append(*dest, chunk.Spans)
+		}
 	default:
 		if err := decodeRequest(req, dest); err != nil {
 			return err
