@@ -1,0 +1,92 @@
+[
+  [
+    {
+      "service": "httpbin.org:443",
+      "name": "http.request",
+      "resource": "GET httpbin.org/headers",
+      "trace_id": 2389442122630582718,
+      "span_id": 7007187616547606927,
+      "parent_id": 7188675154174037693,
+      "start": 1674543056286115700,
+      "duration": 1458312500,
+      "error": 0,
+      "meta": {
+        "component": "HttpMessageHandler",
+        "env": "local",
+        "http-client-handler-type": "System.Net.Http.HttpClientHandler",
+        "http.method": "GET",
+        "http.status_code": "200",
+        "http.url": "https://httpbin.org/headers",
+        "runtime-id": "163a408f-c0f1-4426-868a-6ca7d76054e0",
+        "span.kind": "client"
+      },
+      "metrics": {
+        "_dd.top_level": 1
+      },
+      "type": "http"
+    },
+    {
+      "service": "TracingPoc",
+      "name": "aspnet_core_mvc.request",
+      "resource": "GET /test",
+      "trace_id": 2389442122630582718,
+      "span_id": 7188675154174037693,
+      "parent_id": 5384079244777812447,
+      "start": 1674543056285940900,
+      "duration": 1458874200,
+      "error": 0,
+      "meta": {
+        "aspnet_core.action": "get",
+        "aspnet_core.controller": "test",
+        "aspnet_core.route": "test",
+        "component": "aspnet_core",
+        "env": "local",
+        "language": "dotnet",
+        "span.kind": "server",
+        "version": "v1.0.0"
+      },
+      "metrics": null,
+      "type": "web"
+    },
+    {
+      "service": "TracingPoc",
+      "name": "aspnet_core.request",
+      "resource": "GET /test",
+      "trace_id": 2389442122630582718,
+      "span_id": 5384079244777812447,
+      "parent_id": 0,
+      "start": 1674543056285555400,
+      "duration": 1459397900,
+      "error": 0,
+      "meta": {
+        "_dd.p.dm": "-3",
+        "a": "gzip, deflate",
+        "aspnet_core.endpoint": "TracingPoc31.Controllers.TestController.Get (TracingPoc31)",
+        "aspnet_core.route": "test",
+        "b": "0.0.0.0:4785",
+        "c": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+        "component": "aspnet_core",
+        "env": "local",
+        "http.method": "GET",
+        "http.request.headers.host": "0.0.0.0:4785",
+        "http.route": "test",
+        "http.status_code": "200",
+        "http.url": "http://0.0.0.0:4785/test",
+        "http.useragent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+        "language": "dotnet",
+        "runtime-id": "163a408f-c0f1-4426-868a-6ca7d76054e0",
+        "span.kind": "server",
+        "version": "v1.0.0"
+      },
+      "metrics": {
+        "_dd.limit_psr": 1,
+        "_dd.rule_psr": 1,
+        "_dd.top_level": 1,
+        "_dd.tracer_kr": 0,
+        "_sampling_priority_v1": 2,
+        "process_id": 50104
+      },
+      "type": "web"
+    }
+  ]
+]

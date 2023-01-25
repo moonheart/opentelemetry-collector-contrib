@@ -1,0 +1,22 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+  datadog:
+
+processors:
+
+exporters:
+  logging:
+    verbosity: detailed
+  jaeger:
+    endpoint: localhost:14250
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp, datadog]
+      processors: []
+      exporters: [logging]

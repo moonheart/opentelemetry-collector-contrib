@@ -1,0 +1,5 @@
+datadog:
+datadog/customname:
+  endpoint: "localhost:8126"
+datadog/readtimeout:
+  read_timeout: 10s

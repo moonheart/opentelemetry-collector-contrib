@@ -1,0 +1,20 @@
+dist:
+  name: dev-otelcol # the binary name. Optional.
+  output_path: ./dev-otelcol
+exporters:
+  - gomod: "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/jaegerexporter v0.65.0" # the Go module for the component. Required.
+    import: "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/jaegerexporter" # the import path for the component. Optional.
+    name: "jaegerexporter" # package name to use in the generated sources. Optional.
+    path: "./exporter/jaegerexporter" # in case a local version should be used for the module, the path relative to the current dir, or a full path can be specified. Optional.
+  - gomod: "go.opentelemetry.io/collector/exporter/loggingexporter v0.69.1" # the Go module for the component. Required.
+    import: "go.opentelemetry.io/collector/exporter/loggingexporter" # the import path for the component. Optional.
+    name: "loggingexporter" # package name to use in the generated sources. Optional.
+receivers:
+  - gomod: "go.opentelemetry.io/collector/receiver/otlpreceiver v0.69.1" # the Go module for the component. Required.
+    import: "go.opentelemetry.io/collector/receiver/otlpreceiver" # the import path for the component. Optional.
+    name: "otlpreceiver" # package name to use in the generated sources. Optional.
+  - gomod: "go.opentelemetry.io/collector/receiver/datadogreceiver v0.69.1" # the Go module for the component. Required.
+    import: "go.opentelemetry.io/collector/receiver/datadogreceiver" # the import path for the component. Optional.
+    name: "datadogreceiver" # package name to use in the generated sources. Optional.
+    path: "./receiver/datadogreceiver"
+
